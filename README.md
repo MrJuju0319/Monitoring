@@ -1,87 +1,110 @@
 # Acre MQTT Monitoring
 
-Interface web orientée **lecture MQTT** (pas d'export SPC dans cette app) pour :
+Application web de supervision orientée **MQTT** avec :
 
-- configurer un ou plusieurs serveurs MQTT,
-- activer des plugins de type **ACRE** en choisissant leur topic root,
-- afficher les informations (zones, secteurs, états, etc.) avec logos/icônes,
-- gérer un mur d'image avec caméras RTSP (ajout/suppression).
+- lecture temps réel des topics MQTT,
+- plugins de type **ACRE** configurables par `topicRoot`,
+- décodage lisible (zones/secteurs/état contrôleur),
+- mur vidéo RTSP avec transcoding local automatique vers HLS.
 
 ## Fonctionnalités
 
-## 1) Dashboard
+### 1) Dashboard
 
-- Vue synthèse :
-  - nombre de topics MQTT reçus,
+- KPIs :
+  - nombre de topics reçus,
   - plugins ACRE actifs,
-  - nombre de secteurs,
-  - nombre de zones.
-- Liste des topics décodés avec icônes :
-  - 📡 zones
-  - 🛡️ secteurs
-  - 🚪 portes
-  - 🔌 sorties
-  - 🧠 état contrôleur
+  - zones détectées,
+  - secteurs détectés,
+  - nombre de valeurs état contrôleur.
+- Vue décodée ACRE :
+  - zones (`name`, `secteur`, `state`, `entree`),
+  - secteurs (`name`, `state`),
+  - sections `etat/*` (systeme, ethernet, alimentation, etc.).
+- Vue brute des topics MQTT avec icônes par type.
 
-## 2) Serveurs MQTT
+### 2) Serveurs MQTT
 
-- Ajout d'un broker MQTT en **WebSocket** :
-  - nom
-  - URL (`ws://...` ou `wss://...`)
-  - identifiants optionnels
-- Connexion / déconnexion par serveur.
-- Suppression serveur.
-- Import d'un snapshot JSON de topics MQTT (utile pour tests rapides).
-- Bouton de chargement d'une démo inspirée de tes captures.
+- Ajout de serveurs MQTT en **WebSocket** (`ws://` / `wss://`).
+- Connexion / déconnexion / suppression.
+- Import de snapshot JSON (`topic -> payload`) pour test rapide.
+- Snapshot démo fourni selon le format de tes captures.
+- Bouton pour vider les topics en mémoire.
 
-## 3) Plugins
+### 3) Plugins
 
-- Création de plugins :
-  - type (`ACRE`, `Custom`)
-  - nom
-  - serveur MQTT associé
-  - topic root (ex: `acre_indus`)
-- Activation / désactivation plugin.
+- Création d'un plugin:
+  - type (`ACRE`, `Custom`),
+  - nom,
+  - serveur MQTT associé,
+  - topic root (`acre_indus`, etc.).
+- Activation / désactivation.
 - Suppression plugin.
 
-## 4) Mur vidéo RTSP
+### 4) Mur vidéo RTSP (sans proxy externe)
 
-- Ajouter et supprimer des caméras.
-- Données caméra :
-  - nom
-  - URL RTSP
-  - URL web optionnelle (proxy HLS/WebRTC)
-- Si `webUrl` est renseignée, un player vidéo HTML5 est affiché.
-- Sinon, la carte indique qu'un proxy est nécessaire pour affichage web direct de RTSP.
+- Ajout/suppression de caméras RTSP.
+- La webapp utilise une **passerelle locale incluse** (`gateway_server.py`) qui fait:
+  - `RTSP -> HLS` via `ffmpeg`,
+  - exposition des flux HLS lisibles par navigateur.
+- Tu peux aussi définir un `webUrl` manuel si tu as déjà un flux HLS.
 
-## Données MQTT attendues (exemple ACRE)
+---
 
-Topics typiques lisibles par le dashboard :
+## Démarrage
 
-- `acre_indus/zones/1/name`
-- `acre_indus/zones/1/state`
-- `acre_indus/secteurs/1/name`
-- `acre_indus/secteurs/1/state`
-- `acre_indus/etat/systeme/Heure Système`
-- `acre_indus/etat/ethernet/Adresse IP`
-
-## Lancement local
+### A) Frontend
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Puis ouvrir :
+Ouvrir ensuite:
 
-- `http://localhost:8000`
+- `http://127.0.0.1:8000`
 
-## Fichiers
+### B) Passerelle vidéo locale (obligatoire pour RTSP natif)
 
-- `index.html` : structure UI (dashboard, MQTT, plugins, vidéo)
-- `app.js` : logique MQTT, parsing topics, plugins, mur vidéo
-- `styles.css` : style responsive
+Pré-requis:
 
-## Notes importantes
+- `python3`
+- `pip install flask`
+- `ffmpeg` installé sur la machine
 
-- Cette application est maintenant centrée sur la **lecture MQTT uniquement**.
-- Le navigateur ne lit pas RTSP nativement : pour un affichage vidéo réel, passer par un proxy/gateway (HLS/WebRTC) et renseigner `webUrl`.
+Lancement:
+
+```bash
+python3 gateway_server.py
+```
+
+API par défaut:
+
+- `http://127.0.0.1:8787`
+
+---
+
+## Exemples de topics MQTT (ACRE)
+
+- `acre_indus/zones/1/name`
+- `acre_indus/zones/1/secteur`
+- `acre_indus/zones/1/state`
+- `acre_indus/zones/1/entree`
+- `acre_indus/secteurs/1/name`
+- `acre_indus/secteurs/1/state`
+- `acre_indus/etat/systeme/Heure Système`
+- `acre_indus/etat/ethernet/Adresse IP`
+- `acre_indus/etat/alimentation/Alimentation 230V`
+
+---
+
+## Structure du projet
+
+- `index.html` : structure UI (dashboard, mqtt, plugins, vidéo)
+- `app.js` : logique temps réel MQTT, décodage ACRE, gestion plugins/caméras
+- `styles.css` : thème responsive
+- `gateway_server.py` : passerelle locale RTSP -> HLS
+
+## Limitations connues
+
+- Les navigateurs ne lisent pas RTSP directement. La passerelle locale règle ce point sans service proxy externe séparé.
+- La connexion MQTT côté frontend requiert un endpoint WebSocket sur ton broker.

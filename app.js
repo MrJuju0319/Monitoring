@@ -3,6 +3,7 @@ const panels = document.querySelectorAll('.tab-panel');
 const simpleCardTemplate = document.getElementById('simpleCardTemplate');
 
 const summaryGrid = document.getElementById('summaryGrid');
+const decodedGrid = document.getElementById('decodedGrid');
 const dataGrid = document.getElementById('dataGrid');
 
 const mqttForm = document.getElementById('mqttForm');
@@ -10,19 +11,22 @@ const mqttServersGrid = document.getElementById('mqttServersGrid');
 const snapshotInput = document.getElementById('snapshotInput');
 const loadSnapshotBtn = document.getElementById('loadSnapshotBtn');
 const loadDemoBtn = document.getElementById('loadDemoBtn');
+const clearTopicsBtn = document.getElementById('clearTopicsBtn');
 
 const pluginForm = document.getElementById('pluginForm');
 const pluginServerSelect = document.getElementById('pluginServerSelect');
 const pluginsGrid = document.getElementById('pluginsGrid');
 
+const gatewayApiInput = document.getElementById('gatewayApiInput');
 const cameraForm = document.getElementById('cameraForm');
 const cameraWall = document.getElementById('cameraWall');
 
 const STORAGE = {
-  mqttServers: 'acre.mqtt.servers.v1',
-  plugins: 'acre.plugins.v1',
-  cameras: 'acre.cameras.v1',
-  topicState: 'acre.topic.state.v1',
+  mqttServers: 'acre.mqtt.servers.v2',
+  plugins: 'acre.plugins.v2',
+  cameras: 'acre.cameras.v2',
+  topicState: 'acre.topic.state.v2',
+  gatewayApi: 'acre.gateway.api.v1',
 };
 
 const demoSnapshot = {
@@ -32,24 +36,27 @@ const demoSnapshot = {
   'acre_indus/zones/1/entree': '0',
   'acre_indus/zones/2/name': '2 IR Disney',
   'acre_indus/zones/2/secteur': '2 Disney',
-  'acre_indus/zones/2/state': '0',
-  'acre_indus/zones/2/entree': '0',
+  'acre_indus/zones/2/state': '1',
+  'acre_indus/zones/2/entree': '1',
   'acre_indus/secteurs/0/name': 'Tous Secteurs',
   'acre_indus/secteurs/0/state': '2',
   'acre_indus/secteurs/1/name': 'Induselec/RJS',
   'acre_indus/secteurs/1/state': '0',
+  'acre_indus/secteurs/2/name': 'Disney',
+  'acre_indus/secteurs/2/state': '1',
   'acre_indus/etat/systeme/Heure Système': 'Mer, 18 Fév 2026 15:44:21',
-  'acre_indus/etat/systeme/Module Radio': 'N/A',
   'acre_indus/etat/ethernet/Adresse IP': '192.168.1.125',
   'acre_indus/etat/alimentation/Alimentation 230V': 'OK',
 };
 
 let mqttServers = loadJSON(STORAGE.mqttServers, []);
-let plugins = loadJSON(STORAGE.plugins, [
-  { id: crypto.randomUUID(), type: 'ACRE', name: 'Acre Indus', serverId: '', topicRoot: 'acre_indus', enabled: true },
-]);
+let plugins = loadJSON(STORAGE.plugins, []);
+if (!plugins.length) {
+  plugins = [{ id: crypto.randomUUID(), type: 'ACRE', name: 'Acre Indus', serverId: '', topicRoot: 'acre_indus', enabled: true }];
+}
 let cameras = loadJSON(STORAGE.cameras, []);
 let topicState = loadJSON(STORAGE.topicState, {});
+let gatewayApi = localStorage.getItem(STORAGE.gatewayApi) || 'http://127.0.0.1:8787';
 
 const mqttClients = new Map();
 
@@ -79,6 +86,22 @@ function createCard(title, badge, meta) {
   return node;
 }
 
+function labelZoneState(state) {
+  if (String(state) === '0') return 'Normal';
+  if (String(state) === '1') return 'Alarme';
+  return String(state);
+}
+
+function labelEntreeState(state) {
+  const map = { '0': 'Fermée', '1': 'Ouverte', '2': 'Isolée', '3': 'Inhibée' };
+  return map[String(state)] || String(state);
+}
+
+function labelSecteurState(state) {
+  const map = { '0': 'MHS', '1': 'MES totale', '2': 'Nuit', '3': 'MES partielle B', '4': 'Alarme' };
+  return map[String(state)] || String(state);
+}
+
 function mqttIcon(topic) {
   if (topic.includes('/zones/')) return '📡 Zone';
   if (topic.includes('/secteurs/')) return '🛡️ Secteur';
@@ -89,7 +112,7 @@ function mqttIcon(topic) {
 }
 
 function buildPluginData(plugin) {
-  const root = `${plugin.topicRoot}/`;
+  const root = `${plugin.topicRoot.replace(/\/+$/, '')}/`;
   const entries = Object.entries(topicState).filter(([topic]) => topic.startsWith(root));
 
   const data = { zones: {}, secteurs: {}, doors: {}, outputs: {}, etat: {} };
@@ -111,7 +134,19 @@ function buildPluginData(plugin) {
     data[category] = data[category] || {};
     data[category][id] = data[category][id] || {};
     const key = rest.join('/') || 'value';
-    data[category][id][key] = payload;
+
+    let parsedValue = payload;
+    if (typeof payload === 'string') {
+      const trimmed = payload.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          parsedValue = JSON.parse(trimmed);
+        } catch {
+          parsedValue = payload;
+        }
+      }
+    }
+    data[category][id][key] = parsedValue;
   }
 
   return data;
@@ -124,25 +159,61 @@ function renderDashboard() {
   const totalTopics = Object.keys(topicState).length;
   const totalZones = decoded.reduce((acc, d) => acc + Object.keys(d.data.zones || {}).length, 0);
   const totalSecteurs = decoded.reduce((acc, d) => acc + Object.keys(d.data.secteurs || {}).length, 0);
+  const totalEtatLines = decoded.reduce((acc, d) => acc + Object.values(d.data.etat || {}).reduce((s, section) => s + Object.keys(section).length, 0), 0);
 
   summaryGrid.replaceChildren(
     createCard('📡 Topics MQTT', 'Live', `${totalTopics} topic(s)`),
     createCard('🧩 Plugins actifs', 'ACRE', `${enabledPlugins.length} plugin(s)`),
     createCard('🛡️ Secteurs', 'ACRE', `${totalSecteurs} secteur(s)`),
     createCard('📟 Zones', 'ACRE', `${totalZones} zone(s)`),
+    createCard('🧠 État contrôleur', 'ACRE', `${totalEtatLines} valeur(s)`),
   );
 
-  const cards = [];
-  for (const [topic, payload] of Object.entries(topicState).slice(0, 80)) {
-    cards.push(createCard(topic, mqttIcon(topic), String(payload)));
+  const decodedCards = [];
+  for (const item of decoded) {
+    const { plugin, data } = item;
+
+    for (const [zoneId, zone] of Object.entries(data.zones || {})) {
+      decodedCards.push(
+        createCard(
+          `📡 ${plugin.name} · Zone ${zoneId} ${zone.name || ''}`.trim(),
+          'ZONE',
+          `secteur=${zone.secteur || '-'} · état=${labelZoneState(zone.state)} · entrée=${labelEntreeState(zone.entree)}`,
+        ),
+      );
+    }
+
+    for (const [sid, sec] of Object.entries(data.secteurs || {})) {
+      decodedCards.push(
+        createCard(
+          `🛡️ ${plugin.name} · Secteur ${sid} ${sec.name || ''}`.trim(),
+          'SECTEUR',
+          `état=${labelSecteurState(sec.state)}`,
+        ),
+      );
+    }
+
+    for (const [sectionName, sectionValues] of Object.entries(data.etat || {})) {
+      const valueText = Object.entries(sectionValues)
+        .slice(0, 10)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(' · ');
+      decodedCards.push(createCard(`🧠 ${plugin.name} · ${sectionName}`, 'ÉTAT', valueText || '-'));
+    }
   }
-  dataGrid.replaceChildren(...cards);
+  decodedGrid.replaceChildren(...decodedCards.slice(0, 120));
+
+  const rawCards = [];
+  for (const [topic, payload] of Object.entries(topicState)) {
+    rawCards.push(createCard(topic, mqttIcon(topic), String(payload)));
+  }
+  dataGrid.replaceChildren(...rawCards.slice(0, 200));
 }
 
 function renderMqttServers() {
   mqttServersGrid.replaceChildren(
     ...mqttServers.map((server) => {
-      const card = createCard(server.name, 'MQTT', `${server.wsUrl}`);
+      const card = createCard(server.name, mqttClients.has(server.id) ? 'CONNECTÉ' : 'MQTT', `${server.wsUrl}`);
 
       const row = document.createElement('div');
       row.className = 'row-actions';
@@ -188,7 +259,7 @@ function renderPlugins() {
   pluginsGrid.replaceChildren(
     ...plugins.map((plugin) => {
       const server = mqttServers.find((s) => s.id === plugin.serverId);
-      const card = createCard(`${plugin.type} · ${plugin.name}`, plugin.enabled ? 'ON' : 'OFF', `root: ${plugin.topicRoot}\nserveur: ${server?.name || '-'}`);
+      const card = createCard(`${plugin.type} · ${plugin.name}`, plugin.enabled ? 'ON' : 'OFF', `root=${plugin.topicRoot}\nserveur=${server?.name || '-'}`);
 
       const row = document.createElement('div');
       row.className = 'row-actions';
@@ -222,6 +293,25 @@ function renderPlugins() {
   );
 }
 
+async function ensureGatewayCamera(cam) {
+  if (cam.webUrl) return cam.webUrl;
+  const api = gatewayApi.replace(/\/+$/, '');
+  try {
+    const response = await fetch(`${api}/api/cameras`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ camera_id: cam.id, rtsp_url: cam.rtspUrl }),
+    });
+    if (!response.ok) throw new Error('gateway error');
+    const data = await response.json();
+    cam.webUrl = data.hls_url;
+    saveJSON(STORAGE.cameras, cameras);
+    return cam.webUrl;
+  } catch {
+    return '';
+  }
+}
+
 function renderCameras() {
   cameraWall.replaceChildren(
     ...cameras.map((cam) => {
@@ -238,19 +328,30 @@ function renderCameras() {
 
       const zone = document.createElement('div');
       zone.className = 'camera-feed';
-      if (cam.webUrl) {
+
+      const info = document.createElement('p');
+      info.className = 'meta';
+      info.textContent = 'Initialisation flux...';
+      zone.append(info);
+
+      ensureGatewayCamera(cam).then((hlsUrl) => {
+        zone.replaceChildren();
+        if (!hlsUrl) {
+          const note = document.createElement('p');
+          note.className = 'meta';
+          note.textContent = 'Impossible de créer le flux auto. Lance gateway_server.py puis réessaie.';
+          zone.append(note);
+          return;
+        }
+
         const video = document.createElement('video');
-        video.src = cam.webUrl;
+        video.src = hlsUrl;
         video.controls = true;
         video.autoplay = true;
         video.muted = true;
         video.playsInline = true;
         zone.append(video);
-      } else {
-        const note = document.createElement('p');
-        note.textContent = 'Flux RTSP détecté. Pour affichage web direct, configure un proxy HLS/WebRTC.';
-        zone.append(note);
-      }
+      });
 
       const actions = document.createElement('div');
       actions.className = 'row-actions';
@@ -258,7 +359,13 @@ function renderCameras() {
       del.type = 'button';
       del.className = 'danger';
       del.textContent = 'Supprimer caméra';
-      del.addEventListener('click', () => {
+      del.addEventListener('click', async () => {
+        const api = gatewayApi.replace(/\/+$/, '');
+        try {
+          await fetch(`${api}/api/cameras/${cam.id}`, { method: 'DELETE' });
+        } catch {
+          // ignore
+        }
         cameras = cameras.filter((c) => c.id !== cam.id);
         saveJSON(STORAGE.cameras, cameras);
         renderCameras();
@@ -355,6 +462,12 @@ loadDemoBtn.addEventListener('click', () => {
   renderDashboard();
 });
 
+clearTopicsBtn.addEventListener('click', () => {
+  topicState = {};
+  saveJSON(STORAGE.topicState, topicState);
+  renderDashboard();
+});
+
 pluginForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const formData = new FormData(pluginForm);
@@ -372,6 +485,13 @@ pluginForm.addEventListener('submit', (event) => {
   pluginForm.reset();
   renderPlugins();
   renderDashboard();
+});
+
+gatewayApiInput.value = gatewayApi;
+gatewayApiInput.addEventListener('change', () => {
+  gatewayApi = gatewayApiInput.value.trim() || 'http://127.0.0.1:8787';
+  localStorage.setItem(STORAGE.gatewayApi, gatewayApi);
+  renderCameras();
 });
 
 cameraForm.addEventListener('submit', (event) => {

@@ -10,7 +10,7 @@
   <body>
     <header class="topbar">
       <h1>Acre MQTT Monitoring</h1>
-      <p>Lecture MQTT, plugins ACRE par topic, et mur vidéo RTSP.</p>
+      <p>Lecture MQTT temps réel, plugins ACRE par topic et mur vidéo RTSP auto-transcodé.</p>
     </header>
 
     <main class="layout">
@@ -24,7 +24,11 @@
       <section id="dashboard" class="tab-panel active">
         <h2>État global</h2>
         <div class="card-grid" id="summaryGrid"></div>
-        <h3>Données MQTT décodées</h3>
+
+        <h3>Données décodées ACRE</h3>
+        <div class="card-grid" id="decodedGrid"></div>
+
+        <h3>Topics MQTT reçus</h3>
         <div class="card-grid" id="dataGrid"></div>
       </section>
 
@@ -37,13 +41,16 @@
           <label>Mot de passe<input name="password" type="password" placeholder="optionnel" /></label>
           <button type="submit">Ajouter serveur</button>
         </form>
+
         <div class="card-grid" id="mqttServersGrid"></div>
+
         <article class="card">
-          <h3>Importer un snapshot topic MQTT (JSON)</h3>
+          <h3>Importer un snapshot topics MQTT (JSON topic->payload)</h3>
           <textarea id="snapshotInput" rows="10" class="mono" placeholder='{"acre_indus/zones/1/name":"1 IR Escalier RJS"}'></textarea>
           <div class="row-actions">
             <button id="loadSnapshotBtn" type="button">Charger snapshot</button>
             <button id="loadDemoBtn" type="button" class="secondary">Charger démo</button>
+            <button id="clearTopicsBtn" type="button" class="danger">Vider topics</button>
           </div>
         </article>
       </section>
@@ -68,12 +75,20 @@
 
       <section id="video" class="tab-panel">
         <h2>Mur d'image RTSP</h2>
+
+        <article class="card">
+          <h3>Passerelle locale RTSP ➜ HLS</h3>
+          <p class="meta">API locale (par défaut <code>http://127.0.0.1:8787</code>) utilisée pour transcoder automatiquement les flux RTSP pour le navigateur.</p>
+          <label>URL API passerelle<input id="gatewayApiInput" placeholder="http://127.0.0.1:8787" /></label>
+        </article>
+
         <form id="cameraForm" class="card form-card wide">
           <label>Nom caméra<input name="name" placeholder="Caméra Entrée" required /></label>
           <label>URL RTSP<input name="rtspUrl" placeholder="rtsp://user:pass@ip:554/stream1" required /></label>
-          <label>URL proxy web (optionnel)<input name="webUrl" placeholder="https://proxy/video.m3u8" /></label>
+          <label>URL web manuelle (optionnel)<input name="webUrl" placeholder="https://.../index.m3u8" /></label>
           <button type="submit">Ajouter caméra</button>
         </form>
+
         <div class="camera-wall" id="cameraWall"></div>
       </section>
     </main>
