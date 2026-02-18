@@ -3,168 +3,78 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Acre Monitoring</title>
+    <title>Acre MQTT Monitoring</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   </head>
   <body>
     <header class="topbar">
-      <h1>Acre Monitoring</h1>
-      <p>Configuration exporter SPC, visualisation temps réel et plan image avec overlays dynamiques.</p>
+      <h1>Acre MQTT Monitoring</h1>
+      <p>Lecture MQTT, plugins ACRE par topic, et mur vidéo RTSP.</p>
     </header>
 
     <main class="layout">
-      <nav class="tabs" aria-label="Navigation Monitoring">
+      <nav class="tabs" aria-label="Navigation">
         <button class="tab active" data-tab="dashboard">Dashboard</button>
-        <button class="tab" data-tab="exporter">Exporter SPC</button>
-        <button class="tab" data-tab="data">Données</button>
-        <button class="tab" data-tab="plan">Plan &amp; Overlays</button>
+        <button class="tab" data-tab="mqtt">Serveurs MQTT</button>
         <button class="tab" data-tab="plugins">Plugins</button>
+        <button class="tab" data-tab="video">Mur vidéo</button>
       </nav>
 
       <section id="dashboard" class="tab-panel active">
-        <h2>Vue monitoring</h2>
+        <h2>État global</h2>
         <div class="card-grid" id="summaryGrid"></div>
+        <h3>Données MQTT décodées</h3>
+        <div class="card-grid" id="dataGrid"></div>
       </section>
 
-      <section id="exporter" class="tab-panel">
-        <h2>Configuration exporter SPC → MQTT</h2>
-        <form id="exporterForm" class="card form-card wide">
-          <label>
-            Host SPC
-            <input name="spcHost" placeholder="https://spc.local" required />
-          </label>
-          <label>
-            Utilisateur SPC
-            <input name="spcUser" placeholder="installateur" required />
-          </label>
-          <label>
-            Broker MQTT (host)
-            <input name="mqttHost" placeholder="127.0.0.1" required />
-          </label>
-          <label>
-            Port MQTT
-            <input name="mqttPort" type="number" min="1" max="65535" required />
-          </label>
-          <label>
-            Base topic
-            <input name="baseTopic" placeholder="spc" required />
-          </label>
-          <label>
-            Refresh (s)
-            <input name="refresh" type="number" min="0.2" step="0.1" required />
-          </label>
-          <label class="check">
-            <input type="checkbox" name="infoZones" /> Infos zones
-          </label>
-          <label class="check">
-            <input type="checkbox" name="infoSecteurs" /> Infos secteurs
-          </label>
-          <label class="check">
-            <input type="checkbox" name="infoDoors" /> Infos portes
-          </label>
-          <label class="check">
-            <input type="checkbox" name="infoOutputs" /> Infos sorties
-          </label>
-          <button type="submit">Enregistrer la configuration</button>
-          <button type="button" id="exportConfigBtn" class="secondary">Exporter en JSON</button>
+      <section id="mqtt" class="tab-panel">
+        <h2>Configuration serveurs MQTT</h2>
+        <form id="mqttForm" class="card form-card wide">
+          <label>Nom serveur<input name="name" placeholder="Broker principal" required /></label>
+          <label>URL WebSocket<input name="wsUrl" placeholder="ws://192.168.1.10:9001" required /></label>
+          <label>Utilisateur<input name="username" placeholder="optionnel" /></label>
+          <label>Mot de passe<input name="password" type="password" placeholder="optionnel" /></label>
+          <button type="submit">Ajouter serveur</button>
         </form>
-
+        <div class="card-grid" id="mqttServersGrid"></div>
         <article class="card">
-          <h3>JSON de configuration</h3>
-          <textarea id="configJson" rows="14" class="mono"></textarea>
-        </article>
-      </section>
-
-      <section id="data" class="tab-panel">
-        <h2>Données exporter visibles</h2>
-        <article class="card">
-          <h3>Importer des données exporter (JSON)</h3>
-          <textarea id="dataJson" rows="12" class="mono"></textarea>
+          <h3>Importer un snapshot topic MQTT (JSON)</h3>
+          <textarea id="snapshotInput" rows="10" class="mono" placeholder='{"acre_indus/zones/1/name":"1 IR Escalier RJS"}'></textarea>
           <div class="row-actions">
-            <button id="loadDataBtn" type="button">Charger les données</button>
-            <button id="loadSampleBtn" type="button" class="secondary">Charger un exemple</button>
+            <button id="loadSnapshotBtn" type="button">Charger snapshot</button>
+            <button id="loadDemoBtn" type="button" class="secondary">Charger démo</button>
           </div>
         </article>
-
-        <div class="card-grid" id="allDataGrid"></div>
-      </section>
-
-      <section id="plan" class="tab-panel">
-        <h2>Plan image + overlays SPC</h2>
-
-        <article class="card form-card wide">
-          <label>
-            Image de fond
-            <input id="planImageInput" type="file" accept="image/*" />
-          </label>
-          <form id="overlayForm" class="nested-grid">
-            <label>
-              Catégorie
-              <select name="category" required>
-                <option value="zones">zones</option>
-                <option value="areas">areas</option>
-                <option value="doors">doors</option>
-                <option value="outputs">outputs</option>
-                <option value="controller">controller</option>
-              </select>
-            </label>
-            <label>
-              ID / clé
-              <input name="key" placeholder="Ex: 1, zone_1, systeme" required />
-            </label>
-            <label>
-              Champ
-              <input name="field" placeholder="Ex: etat_txt, state, values.status" required />
-            </label>
-            <label>
-              X (% image)
-              <input name="x" type="number" min="0" max="100" value="10" required />
-            </label>
-            <label>
-              Y (% image)
-              <input name="y" type="number" min="0" max="100" value="10" required />
-            </label>
-            <button type="submit">Ajouter overlay</button>
-          </form>
-        </article>
-
-        <article class="card plan-card">
-          <div class="plan-canvas" id="planCanvas">
-            <p class="plan-placeholder">Charge une image pour afficher les informations dessus.</p>
-          </div>
-        </article>
-
-        <div class="card-grid" id="overlayList"></div>
       </section>
 
       <section id="plugins" class="tab-panel">
-        <h2>Plugins disponibles / à activer</h2>
-
-        <form id="pluginForm" class="card form-card">
+        <h2>Plugins</h2>
+        <form id="pluginForm" class="card form-card wide">
           <label>
-            Type plugin
-            <select name="pluginType" required>
-              <option value="RTSP">RTSP</option>
-              <option value="Dahua">Dahua</option>
-              <option value="Hikvision">Hikvision</option>
+            Type
+            <select name="type" required>
+              <option value="ACRE">ACRE</option>
               <option value="Custom">Custom</option>
             </select>
           </label>
-
-          <label>
-            Nom affiché
-            <input name="pluginName" type="text" placeholder="Ex: Caméra Parking" required />
-          </label>
-
-          <label>
-            Endpoint / URL
-            <input name="endpoint" type="text" placeholder="rtsp://..." required />
-          </label>
-
-          <button type="submit">Ajouter le plugin</button>
+          <label>Nom plugin<input name="name" placeholder="Acre Indus" required /></label>
+          <label>Serveur MQTT<select name="serverId" id="pluginServerSelect"></select></label>
+          <label>Topic root<input name="topicRoot" placeholder="acre_indus" required /></label>
+          <button type="submit">Ajouter plugin</button>
         </form>
+        <div class="card-grid" id="pluginsGrid"></div>
+      </section>
 
-        <div class="card-grid" id="pluginGrid"></div>
+      <section id="video" class="tab-panel">
+        <h2>Mur d'image RTSP</h2>
+        <form id="cameraForm" class="card form-card wide">
+          <label>Nom caméra<input name="name" placeholder="Caméra Entrée" required /></label>
+          <label>URL RTSP<input name="rtspUrl" placeholder="rtsp://user:pass@ip:554/stream1" required /></label>
+          <label>URL proxy web (optionnel)<input name="webUrl" placeholder="https://proxy/video.m3u8" /></label>
+          <button type="submit">Ajouter caméra</button>
+        </form>
+        <div class="camera-wall" id="cameraWall"></div>
       </section>
     </main>
 

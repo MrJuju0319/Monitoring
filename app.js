@@ -1,87 +1,64 @@
 const tabs = document.querySelectorAll('.tab');
 const panels = document.querySelectorAll('.tab-panel');
-
-const pluginForm = document.getElementById('pluginForm');
-const pluginGrid = document.getElementById('pluginGrid');
-const summaryGrid = document.getElementById('summaryGrid');
-const allDataGrid = document.getElementById('allDataGrid');
 const simpleCardTemplate = document.getElementById('simpleCardTemplate');
 
-const exporterForm = document.getElementById('exporterForm');
-const exportConfigBtn = document.getElementById('exportConfigBtn');
-const configJson = document.getElementById('configJson');
+const summaryGrid = document.getElementById('summaryGrid');
+const dataGrid = document.getElementById('dataGrid');
 
-const dataJson = document.getElementById('dataJson');
-const loadDataBtn = document.getElementById('loadDataBtn');
-const loadSampleBtn = document.getElementById('loadSampleBtn');
+const mqttForm = document.getElementById('mqttForm');
+const mqttServersGrid = document.getElementById('mqttServersGrid');
+const snapshotInput = document.getElementById('snapshotInput');
+const loadSnapshotBtn = document.getElementById('loadSnapshotBtn');
+const loadDemoBtn = document.getElementById('loadDemoBtn');
 
-const planImageInput = document.getElementById('planImageInput');
-const planCanvas = document.getElementById('planCanvas');
-const overlayForm = document.getElementById('overlayForm');
-const overlayList = document.getElementById('overlayList');
+const pluginForm = document.getElementById('pluginForm');
+const pluginServerSelect = document.getElementById('pluginServerSelect');
+const pluginsGrid = document.getElementById('pluginsGrid');
 
-const LOCAL_CONFIG_KEY = 'acre.monitoring.exporter.config.v1';
-const LOCAL_DATA_KEY = 'acre.monitoring.exporter.data.v1';
-const LOCAL_OVERLAYS_KEY = 'acre.monitoring.exporter.overlays.v1';
+const cameraForm = document.getElementById('cameraForm');
+const cameraWall = document.getElementById('cameraWall');
 
-const plugins = [
-  { pluginType: 'RTSP', pluginName: 'Caméra Entrée', endpoint: 'rtsp://camera-entree.local/live' },
-  { pluginType: 'Hikvision', pluginName: 'Caméra Stockage', endpoint: 'hikvision://192.168.1.40' },
-];
-
-const defaultConfig = {
-  spcHost: 'https://spc.local',
-  spcUser: 'installateur',
-  mqttHost: '127.0.0.1',
-  mqttPort: 1883,
-  baseTopic: 'spc',
-  refresh: 2,
-  information: {
-    zones: true,
-    secteurs: true,
-    doors: true,
-    outputs: true,
-  },
+const STORAGE = {
+  mqttServers: 'acre.mqtt.servers.v1',
+  plugins: 'acre.plugins.v1',
+  cameras: 'acre.cameras.v1',
+  topicState: 'acre.topic.state.v1',
 };
 
-const sampleData = {
-  zones: [
-    { id: '1', zone: '1 Entrée', etat: 0, etat_txt: 'Normal', entree: 0, entree_txt: 'Fermée' },
-    { id: '2', zone: '2 Stockage', etat: 1, etat_txt: 'Alarme', entree: 1, entree_txt: 'Ouverte' },
-  ],
-  areas: [
-    { sid: '1', nom: 'Bâtiment A', etat: 1, etat_txt: 'MES totale' },
-    { sid: '2', nom: 'Bâtiment B', etat: 0, etat_txt: 'MHS' },
-  ],
-  doors: [
-    { id: '1', door: 'Porte Accueil', etat: 0, etat_txt: 'Normale', drs: 0, drs_txt: 'Fermée' },
-  ],
-  outputs: [
-    { id: '1', name: 'Sirène 1', state: 0, state_txt: 'Off' },
-    { id: '2', name: 'Lumière Alarme', state: 1, state_txt: 'On' },
-  ],
-  controller: [
-    {
-      slug: 'systeme',
-      title: 'Système',
-      values: { status: 'OK', version: '4.2.1' },
-      labels: { status: 'Status', version: 'Version' },
-    },
-  ],
+const demoSnapshot = {
+  'acre_indus/zones/1/name': '1 IR Escalier RJS',
+  'acre_indus/zones/1/secteur': '1 Induselec/RJS',
+  'acre_indus/zones/1/state': '0',
+  'acre_indus/zones/1/entree': '0',
+  'acre_indus/zones/2/name': '2 IR Disney',
+  'acre_indus/zones/2/secteur': '2 Disney',
+  'acre_indus/zones/2/state': '0',
+  'acre_indus/zones/2/entree': '0',
+  'acre_indus/secteurs/0/name': 'Tous Secteurs',
+  'acre_indus/secteurs/0/state': '2',
+  'acre_indus/secteurs/1/name': 'Induselec/RJS',
+  'acre_indus/secteurs/1/state': '0',
+  'acre_indus/etat/systeme/Heure Système': 'Mer, 18 Fév 2026 15:44:21',
+  'acre_indus/etat/systeme/Module Radio': 'N/A',
+  'acre_indus/etat/ethernet/Adresse IP': '192.168.1.125',
+  'acre_indus/etat/alimentation/Alimentation 230V': 'OK',
 };
 
-let exporterConfig = loadJSON(LOCAL_CONFIG_KEY, defaultConfig);
-let exporterData = loadJSON(LOCAL_DATA_KEY, sampleData);
-let overlays = loadJSON(LOCAL_OVERLAYS_KEY, []);
-let currentPlanImage = null;
+let mqttServers = loadJSON(STORAGE.mqttServers, []);
+let plugins = loadJSON(STORAGE.plugins, [
+  { id: crypto.randomUUID(), type: 'ACRE', name: 'Acre Indus', serverId: '', topicRoot: 'acre_indus', enabled: true },
+]);
+let cameras = loadJSON(STORAGE.cameras, []);
+let topicState = loadJSON(STORAGE.topicState, {});
+
+const mqttClients = new Map();
 
 function loadJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return structuredClone(fallback);
-    return JSON.parse(raw);
+    return raw ? JSON.parse(raw) : fallback;
   } catch {
-    return structuredClone(fallback);
+    return fallback;
   }
 }
 
@@ -102,296 +79,324 @@ function createCard(title, badge, meta) {
   return node;
 }
 
-function renderPlugins() {
-  pluginGrid.replaceChildren(
-    ...plugins.map((plugin) =>
-      createCard(plugin.pluginName, plugin.pluginType, `Endpoint: ${plugin.endpoint}`),
-    ),
-  );
+function mqttIcon(topic) {
+  if (topic.includes('/zones/')) return '📡 Zone';
+  if (topic.includes('/secteurs/')) return '🛡️ Secteur';
+  if (topic.includes('/doors/')) return '🚪 Porte';
+  if (topic.includes('/outputs/')) return '🔌 Sortie';
+  if (topic.includes('/etat/')) return '🧠 État';
+  return '📄 Topic';
 }
 
-function renderSummary() {
-  const zones = exporterData.zones?.length ?? 0;
-  const areas = exporterData.areas?.length ?? 0;
-  const doors = exporterData.doors?.length ?? 0;
-  const outputs = exporterData.outputs?.length ?? 0;
-  const controller = exporterData.controller?.length ?? 0;
+function buildPluginData(plugin) {
+  const root = `${plugin.topicRoot}/`;
+  const entries = Object.entries(topicState).filter(([topic]) => topic.startsWith(root));
+
+  const data = { zones: {}, secteurs: {}, doors: {}, outputs: {}, etat: {} };
+
+  for (const [topic, payload] of entries) {
+    const sub = topic.slice(root.length).split('/');
+    const [category, id, ...rest] = sub;
+    if (!category) continue;
+
+    if (category === 'etat') {
+      const section = id || 'global';
+      const key = rest.join('/') || 'value';
+      data.etat[section] = data.etat[section] || {};
+      data.etat[section][key] = payload;
+      continue;
+    }
+
+    if (!id) continue;
+    data[category] = data[category] || {};
+    data[category][id] = data[category][id] || {};
+    const key = rest.join('/') || 'value';
+    data[category][id][key] = payload;
+  }
+
+  return data;
+}
+
+function renderDashboard() {
+  const enabledPlugins = plugins.filter((p) => p.enabled && p.type === 'ACRE');
+  const decoded = enabledPlugins.map((p) => ({ plugin: p, data: buildPluginData(p) }));
+
+  const totalTopics = Object.keys(topicState).length;
+  const totalZones = decoded.reduce((acc, d) => acc + Object.keys(d.data.zones || {}).length, 0);
+  const totalSecteurs = decoded.reduce((acc, d) => acc + Object.keys(d.data.secteurs || {}).length, 0);
 
   summaryGrid.replaceChildren(
-    createCard('Zones', 'SPC', `${zones} élément(s)`),
-    createCard('Secteurs', 'SPC', `${areas} élément(s)`),
-    createCard('Portes', 'SPC', `${doors} élément(s)`),
-    createCard('Sorties', 'SPC', `${outputs} élément(s)`),
-    createCard('Controller', 'SPC', `${controller} section(s)`),
+    createCard('📡 Topics MQTT', 'Live', `${totalTopics} topic(s)`),
+    createCard('🧩 Plugins actifs', 'ACRE', `${enabledPlugins.length} plugin(s)`),
+    createCard('🛡️ Secteurs', 'ACRE', `${totalSecteurs} secteur(s)`),
+    createCard('📟 Zones', 'ACRE', `${totalZones} zone(s)`),
   );
-}
 
-function renderAllData() {
   const cards = [];
-
-  for (const zone of exporterData.zones || []) {
-    cards.push(
-      createCard(
-        `Zone ${zone.id || ''} ${zone.zone || ''}`.trim(),
-        'zone',
-        `etat=${zone.etat_txt || zone.etat} · entrée=${zone.entree_txt || zone.entree}`,
-      ),
-    );
+  for (const [topic, payload] of Object.entries(topicState).slice(0, 80)) {
+    cards.push(createCard(topic, mqttIcon(topic), String(payload)));
   }
-
-  for (const area of exporterData.areas || []) {
-    cards.push(
-      createCard(
-        `Secteur ${area.sid || ''} ${area.nom || ''}`.trim(),
-        'area',
-        `etat=${area.etat_txt || area.etat}`,
-      ),
-    );
-  }
-
-  for (const door of exporterData.doors || []) {
-    cards.push(
-      createCard(
-        `Porte ${door.id || ''} ${door.door || ''}`.trim(),
-        'door',
-        `etat=${door.etat_txt || door.etat} · drs=${door.drs_txt || door.drs}`,
-      ),
-    );
-  }
-
-  for (const output of exporterData.outputs || []) {
-    cards.push(
-      createCard(
-        `Sortie ${output.id || ''} ${output.name || ''}`.trim(),
-        'output',
-        `state=${output.state_txt || output.state}`,
-      ),
-    );
-  }
-
-  for (const ctrl of exporterData.controller || []) {
-    const values = ctrl.values || {};
-    cards.push(createCard(`Controller ${ctrl.title || ctrl.slug || ''}`, 'controller', JSON.stringify(values)));
-  }
-
-  allDataGrid.replaceChildren(...cards);
+  dataGrid.replaceChildren(...cards);
 }
 
-function getByCategory(category) {
-  if (category === 'areas') return exporterData.areas || [];
-  if (category === 'zones') return exporterData.zones || [];
-  if (category === 'doors') return exporterData.doors || [];
-  if (category === 'outputs') return exporterData.outputs || [];
-  if (category === 'controller') return exporterData.controller || [];
-  return [];
-}
+function renderMqttServers() {
+  mqttServersGrid.replaceChildren(
+    ...mqttServers.map((server) => {
+      const card = createCard(server.name, 'MQTT', `${server.wsUrl}`);
 
-function resolveField(obj, fieldPath) {
-  const parts = String(fieldPath || '')
-    .split('.')
-    .map((part) => part.trim())
-    .filter(Boolean);
+      const row = document.createElement('div');
+      row.className = 'row-actions';
 
-  let current = obj;
-  for (const part of parts) {
-    if (current == null || typeof current !== 'object') return undefined;
-    current = current[part];
-  }
-  return current;
-}
-
-function resolveOverlayValue(overlay) {
-  const list = getByCategory(overlay.category);
-  const key = String(overlay.key || '').toLowerCase();
-  const match = list.find((item) => {
-    const candidates = [
-      item.id,
-      item.sid,
-      item.zone,
-      item.nom,
-      item.name,
-      item.slug,
-      item.door,
-      item.interaction,
-    ]
-      .filter(Boolean)
-      .map((v) => String(v).toLowerCase());
-    return candidates.includes(key);
-  });
-
-  if (!match) return '[introuvable]';
-  const value = resolveField(match, overlay.field);
-  if (value === undefined) return '[champ inconnu]';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
-function renderPlan() {
-  planCanvas.innerHTML = '';
-
-  if (!currentPlanImage) {
-    const placeholder = document.createElement('p');
-    placeholder.className = 'plan-placeholder';
-    placeholder.textContent = 'Charge une image pour afficher les informations dessus.';
-    planCanvas.append(placeholder);
-    return;
-  }
-
-  const image = document.createElement('img');
-  image.src = currentPlanImage;
-  image.className = 'plan-image';
-  image.alt = 'Plan utilisateur';
-  planCanvas.append(image);
-
-  overlays.forEach((overlay) => {
-    const marker = document.createElement('div');
-    marker.className = 'overlay-item';
-    marker.style.left = `${overlay.x}%`;
-    marker.style.top = `${overlay.y}%`;
-    marker.textContent = `${overlay.category}:${overlay.key} → ${resolveOverlayValue(overlay)}`;
-    planCanvas.append(marker);
-  });
-}
-
-function renderOverlayList() {
-  overlayList.replaceChildren(
-    ...overlays.map((overlay, index) => {
-      const card = createCard(
-        `Overlay #${index + 1}`,
-        overlay.category,
-        `${overlay.key} · ${overlay.field} · (${overlay.x}%, ${overlay.y}%)`,
-      );
-
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'danger';
-      removeBtn.textContent = 'Supprimer';
-      removeBtn.addEventListener('click', () => {
-        overlays = overlays.filter((_, idx) => idx !== index);
-        saveJSON(LOCAL_OVERLAYS_KEY, overlays);
-        renderOverlayList();
-        renderPlan();
+      const connectBtn = document.createElement('button');
+      connectBtn.type = 'button';
+      connectBtn.textContent = mqttClients.has(server.id) ? 'Déconnecter' : 'Connecter';
+      connectBtn.addEventListener('click', () => {
+        if (mqttClients.has(server.id)) disconnectServer(server.id);
+        else connectServer(server.id);
       });
 
-      card.append(removeBtn);
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'danger';
+      deleteBtn.textContent = 'Supprimer';
+      deleteBtn.addEventListener('click', () => {
+        disconnectServer(server.id);
+        mqttServers = mqttServers.filter((s) => s.id !== server.id);
+        saveJSON(STORAGE.mqttServers, mqttServers);
+        renderMqttServers();
+        renderPluginServerSelect();
+      });
+
+      row.append(connectBtn, deleteBtn);
+      card.append(row);
       return card;
     }),
   );
 }
 
-function syncConfigUI() {
-  exporterForm.spcHost.value = exporterConfig.spcHost || '';
-  exporterForm.spcUser.value = exporterConfig.spcUser || '';
-  exporterForm.mqttHost.value = exporterConfig.mqttHost || '';
-  exporterForm.mqttPort.value = exporterConfig.mqttPort || 1883;
-  exporterForm.baseTopic.value = exporterConfig.baseTopic || 'spc';
-  exporterForm.refresh.value = exporterConfig.refresh || 2;
+function renderPluginServerSelect() {
+  pluginServerSelect.replaceChildren();
+  for (const server of mqttServers) {
+    const option = document.createElement('option');
+    option.value = server.id;
+    option.textContent = `${server.name} (${server.wsUrl})`;
+    pluginServerSelect.append(option);
+  }
+}
 
-  exporterForm.infoZones.checked = !!exporterConfig.information?.zones;
-  exporterForm.infoSecteurs.checked = !!exporterConfig.information?.secteurs;
-  exporterForm.infoDoors.checked = !!exporterConfig.information?.doors;
-  exporterForm.infoOutputs.checked = !!exporterConfig.information?.outputs;
+function renderPlugins() {
+  pluginsGrid.replaceChildren(
+    ...plugins.map((plugin) => {
+      const server = mqttServers.find((s) => s.id === plugin.serverId);
+      const card = createCard(`${plugin.type} · ${plugin.name}`, plugin.enabled ? 'ON' : 'OFF', `root: ${plugin.topicRoot}\nserveur: ${server?.name || '-'}`);
 
-  configJson.value = JSON.stringify(exporterConfig, null, 2);
-  dataJson.value = JSON.stringify(exporterData, null, 2);
+      const row = document.createElement('div');
+      row.className = 'row-actions';
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'secondary';
+      toggleBtn.textContent = plugin.enabled ? 'Désactiver' : 'Activer';
+      toggleBtn.addEventListener('click', () => {
+        plugin.enabled = !plugin.enabled;
+        saveJSON(STORAGE.plugins, plugins);
+        renderPlugins();
+        renderDashboard();
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'danger';
+      delBtn.textContent = 'Supprimer';
+      delBtn.addEventListener('click', () => {
+        plugins = plugins.filter((p) => p.id !== plugin.id);
+        saveJSON(STORAGE.plugins, plugins);
+        renderPlugins();
+        renderDashboard();
+      });
+
+      row.append(toggleBtn, delBtn);
+      card.append(row);
+      return card;
+    }),
+  );
+}
+
+function renderCameras() {
+  cameraWall.replaceChildren(
+    ...cameras.map((cam) => {
+      const wrap = document.createElement('article');
+      wrap.className = 'card camera-card';
+
+      const h = document.createElement('h3');
+      h.className = 'title';
+      h.textContent = `🎥 ${cam.name}`;
+
+      const rtsp = document.createElement('p');
+      rtsp.className = 'meta';
+      rtsp.textContent = `RTSP: ${cam.rtspUrl}`;
+
+      const zone = document.createElement('div');
+      zone.className = 'camera-feed';
+      if (cam.webUrl) {
+        const video = document.createElement('video');
+        video.src = cam.webUrl;
+        video.controls = true;
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        zone.append(video);
+      } else {
+        const note = document.createElement('p');
+        note.textContent = 'Flux RTSP détecté. Pour affichage web direct, configure un proxy HLS/WebRTC.';
+        zone.append(note);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'danger';
+      del.textContent = 'Supprimer caméra';
+      del.addEventListener('click', () => {
+        cameras = cameras.filter((c) => c.id !== cam.id);
+        saveJSON(STORAGE.cameras, cameras);
+        renderCameras();
+      });
+      actions.append(del);
+
+      wrap.append(h, rtsp, zone, actions);
+      return wrap;
+    }),
+  );
+}
+
+function updateTopic(topic, payload) {
+  topicState[topic] = payload;
+  saveJSON(STORAGE.topicState, topicState);
+  renderDashboard();
+}
+
+function connectServer(serverId) {
+  const server = mqttServers.find((s) => s.id === serverId);
+  if (!server) return;
+
+  if (!window.mqtt) {
+    alert('Librairie MQTT non chargée (mqtt.min.js).');
+    return;
+  }
+
+  const client = window.mqtt.connect(server.wsUrl, {
+    username: server.username || undefined,
+    password: server.password || undefined,
+    reconnectPeriod: 3000,
+  });
+
+  client.on('connect', () => {
+    client.subscribe('#');
+    renderMqttServers();
+  });
+
+  client.on('message', (topic, message) => {
+    updateTopic(topic, message.toString());
+  });
+
+  client.on('error', () => {
+    renderMqttServers();
+  });
+
+  mqttClients.set(serverId, client);
+  renderMqttServers();
+}
+
+function disconnectServer(serverId) {
+  const client = mqttClients.get(serverId);
+  if (!client) return;
+  client.end(true);
+  mqttClients.delete(serverId);
+  renderMqttServers();
 }
 
 tabs.forEach((tab) => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
 
-pluginForm.addEventListener('submit', (event) => {
+mqttForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const formData = new FormData(pluginForm);
-  plugins.unshift({
-    pluginType: formData.get('pluginType'),
-    pluginName: formData.get('pluginName'),
-    endpoint: formData.get('endpoint'),
+  const formData = new FormData(mqttForm);
+
+  mqttServers.unshift({
+    id: crypto.randomUUID(),
+    name: String(formData.get('name')),
+    wsUrl: String(formData.get('wsUrl')),
+    username: String(formData.get('username') || ''),
+    password: String(formData.get('password') || ''),
   });
-  pluginForm.reset();
-  renderPlugins();
+
+  saveJSON(STORAGE.mqttServers, mqttServers);
+  mqttForm.reset();
+  renderMqttServers();
+  renderPluginServerSelect();
 });
 
-exporterForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const formData = new FormData(exporterForm);
-
-  exporterConfig = {
-    spcHost: String(formData.get('spcHost')),
-    spcUser: String(formData.get('spcUser')),
-    mqttHost: String(formData.get('mqttHost')),
-    mqttPort: Number(formData.get('mqttPort')),
-    baseTopic: String(formData.get('baseTopic')),
-    refresh: Number(formData.get('refresh')),
-    information: {
-      zones: formData.get('infoZones') === 'on',
-      secteurs: formData.get('infoSecteurs') === 'on',
-      doors: formData.get('infoDoors') === 'on',
-      outputs: formData.get('infoOutputs') === 'on',
-    },
-  };
-
-  saveJSON(LOCAL_CONFIG_KEY, exporterConfig);
-  configJson.value = JSON.stringify(exporterConfig, null, 2);
-});
-
-exportConfigBtn.addEventListener('click', () => {
-  configJson.value = JSON.stringify(exporterConfig, null, 2);
-});
-
-loadDataBtn.addEventListener('click', () => {
+loadSnapshotBtn.addEventListener('click', () => {
   try {
-    const parsed = JSON.parse(dataJson.value);
-    exporterData = parsed;
-    saveJSON(LOCAL_DATA_KEY, exporterData);
-    renderSummary();
-    renderAllData();
-    renderPlan();
+    const parsed = JSON.parse(snapshotInput.value);
+    topicState = parsed;
+    saveJSON(STORAGE.topicState, topicState);
+    renderDashboard();
   } catch {
-    alert('JSON invalide');
+    alert('JSON snapshot invalide.');
   }
 });
 
-loadSampleBtn.addEventListener('click', () => {
-  exporterData = structuredClone(sampleData);
-  dataJson.value = JSON.stringify(exporterData, null, 2);
-  saveJSON(LOCAL_DATA_KEY, exporterData);
-  renderSummary();
-  renderAllData();
-  renderPlan();
+loadDemoBtn.addEventListener('click', () => {
+  snapshotInput.value = JSON.stringify(demoSnapshot, null, 2);
+  topicState = structuredClone(demoSnapshot);
+  saveJSON(STORAGE.topicState, topicState);
+  renderDashboard();
 });
 
-planImageInput.addEventListener('change', () => {
-  const [file] = planImageInput.files || [];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    currentPlanImage = String(reader.result || '');
-    renderPlan();
-  };
-  reader.readAsDataURL(file);
-});
-
-overlayForm.addEventListener('submit', (event) => {
+pluginForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const formData = new FormData(overlayForm);
+  const formData = new FormData(pluginForm);
 
-  overlays.push({
-    category: String(formData.get('category')),
-    key: String(formData.get('key')),
-    field: String(formData.get('field')),
-    x: Number(formData.get('x')),
-    y: Number(formData.get('y')),
+  plugins.unshift({
+    id: crypto.randomUUID(),
+    type: String(formData.get('type')),
+    name: String(formData.get('name')),
+    serverId: String(formData.get('serverId') || ''),
+    topicRoot: String(formData.get('topicRoot')),
+    enabled: true,
   });
 
-  saveJSON(LOCAL_OVERLAYS_KEY, overlays);
-  overlayForm.reset();
-  renderOverlayList();
-  renderPlan();
+  saveJSON(STORAGE.plugins, plugins);
+  pluginForm.reset();
+  renderPlugins();
+  renderDashboard();
 });
 
-syncConfigUI();
+cameraForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const formData = new FormData(cameraForm);
+
+  cameras.unshift({
+    id: crypto.randomUUID(),
+    name: String(formData.get('name')),
+    rtspUrl: String(formData.get('rtspUrl')),
+    webUrl: String(formData.get('webUrl') || ''),
+  });
+
+  saveJSON(STORAGE.cameras, cameras);
+  cameraForm.reset();
+  renderCameras();
+});
+
+if (mqttServers.length && plugins.length && !plugins[0].serverId) {
+  plugins[0].serverId = mqttServers[0].id;
+  saveJSON(STORAGE.plugins, plugins);
+}
+
+renderPluginServerSelect();
+renderMqttServers();
 renderPlugins();
-renderSummary();
-renderAllData();
-renderOverlayList();
-renderPlan();
+renderCameras();
+renderDashboard();

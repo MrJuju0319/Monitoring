@@ -1,119 +1,87 @@
-# Monitoring
+# Acre MQTT Monitoring
 
-Projet de monitoring Acre avec :
+Interface web orientée **lecture MQTT** (pas d'export SPC dans cette app) pour :
 
-1. **Interface web dynamique** (HTML/CSS/JS) pour configurer l'exporter, visualiser les données et placer des overlays sur une image/plan.
-2. **Bridge SPC → MQTT** (`spc_mqtt_bridge.py`) pour publier les états et consommer les commandes via MQTT.
+- configurer un ou plusieurs serveurs MQTT,
+- activer des plugins de type **ACRE** en choisissant leur topic root,
+- afficher les informations (zones, secteurs, états, etc.) avec logos/icônes,
+- gérer un mur d'image avec caméras RTSP (ajout/suppression).
 
-## Fonctionnalités web
+## Fonctionnalités
 
-### 1) Dashboard
+## 1) Dashboard
 
-- Résumé visuel des volumes de données reçues depuis l'exporter:
-  - zones
-  - secteurs
-  - portes
-  - sorties
-  - controller
+- Vue synthèse :
+  - nombre de topics MQTT reçus,
+  - plugins ACRE actifs,
+  - nombre de secteurs,
+  - nombre de zones.
+- Liste des topics décodés avec icônes :
+  - 📡 zones
+  - 🛡️ secteurs
+  - 🚪 portes
+  - 🔌 sorties
+  - 🧠 état contrôleur
 
-### 2) Configuration Exporter SPC
+## 2) Serveurs MQTT
 
-- Formulaire de configuration depuis la page :
-  - host SPC
-  - utilisateur SPC
-  - host/port MQTT
-  - base topic
-  - intervalle de refresh
-  - flags d'information (`zones`, `secteurs`, `doors`, `outputs`)
-- Export JSON de la configuration.
-- Sauvegarde locale navigateur (`localStorage`).
+- Ajout d'un broker MQTT en **WebSocket** :
+  - nom
+  - URL (`ws://...` ou `wss://...`)
+  - identifiants optionnels
+- Connexion / déconnexion par serveur.
+- Suppression serveur.
+- Import d'un snapshot JSON de topics MQTT (utile pour tests rapides).
+- Bouton de chargement d'une démo inspirée de tes captures.
 
-### 3) Données exporter visibles
+## 3) Plugins
 
-- Zone de texte JSON pour coller/charger les données exporter.
-- Rendu de **toutes les catégories** sous forme de cartes :
-  - zones
-  - secteurs
-  - portes
-  - sorties
-  - controller
-- Bouton de chargement d'un exemple de données.
+- Création de plugins :
+  - type (`ACRE`, `Custom`)
+  - nom
+  - serveur MQTT associé
+  - topic root (ex: `acre_indus`)
+- Activation / désactivation plugin.
+- Suppression plugin.
 
-### 4) Plan & Overlays
+## 4) Mur vidéo RTSP
 
-- Upload d'une image (plan du site/bâtiment).
-- Ajout d'overlays liés à une donnée exporter :
-  - catégorie (`zones`, `areas`, `doors`, `outputs`, `controller`)
-  - id/clé de l'élément
-  - champ à afficher (`etat_txt`, `state`, `values.status`, etc.)
-  - position X/Y en pourcentage
-- Affichage des overlays directement sur l'image.
-- Liste des overlays + suppression individuelle.
+- Ajouter et supprimer des caméras.
+- Données caméra :
+  - nom
+  - URL RTSP
+  - URL web optionnelle (proxy HLS/WebRTC)
+- Si `webUrl` est renseignée, un player vidéo HTML5 est affiché.
+- Sinon, la carte indique qu'un proxy est nécessaire pour affichage web direct de RTSP.
 
-### 5) Plugins
+## Données MQTT attendues (exemple ACRE)
 
-- Ajout de plugins d'intégration (RTSP, Dahua, Hikvision, custom).
+Topics typiques lisibles par le dashboard :
 
-## Bridge SPC → MQTT
+- `acre_indus/zones/1/name`
+- `acre_indus/zones/1/state`
+- `acre_indus/secteurs/1/name`
+- `acre_indus/secteurs/1/state`
+- `acre_indus/etat/systeme/Heure Système`
+- `acre_indus/etat/ethernet/Adresse IP`
 
-Le script `spc_mqtt_bridge.py` fournit :
-
-- Reconnexion de session SPC robuste (cache, validation, relogin).
-- Publication MQTT des états :
-  - `zones/*`
-  - `secteurs/*`
-  - `doors/*`
-  - `outputs/*`
-  - `etat/*` (controller)
-- Réception de commandes MQTT `*/+/set` avec accusés de réception :
-  - secteurs
-  - zones
-  - portes
-  - sorties
-- Boucle de polling avec intervalle configurable.
-
-## Dépendances Python (bridge)
-
-Exemple minimal :
-
-```bash
-pip install pyyaml requests beautifulsoup4 paho-mqtt
-```
-
-> Le script importe aussi `acre_exp_status.SPCClient` qui doit être disponible dans l'environnement Python.
-
-## Lancement
-
-### 1) Interface web
+## Lancement local
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Puis ouvrir `http://localhost:8000`.
+Puis ouvrir :
 
-### 2) Bridge SPC → MQTT
+- `http://localhost:8000`
 
-```bash
-python3 spc_mqtt_bridge.py -c /etc/acre_exp/config.yml
-```
+## Fichiers
 
-Mode debug :
+- `index.html` : structure UI (dashboard, MQTT, plugins, vidéo)
+- `app.js` : logique MQTT, parsing topics, plugins, mur vidéo
+- `styles.css` : style responsive
 
-```bash
-python3 spc_mqtt_bridge.py -c /etc/acre_exp/config.yml --debug
-```
+## Notes importantes
 
-## Structure
-
-- `index.html` : structure des onglets (dashboard, exporter, data, plan, plugins).
-- `styles.css` : thème visuel responsive et styles du plan/overlays.
-- `app.js` : logique UI (config exporter, rendu des données, overlays image, plugins).
-- `spc_mqtt_bridge.py` : watcher SPC + publication/commande MQTT.
-
-## Roadmap suggérée
-
-- Connecter directement la page web au broker MQTT (WebSocket MQTT) pour le temps réel sans copier/coller JSON.
-- Ajouter édition drag & drop des overlays sur l'image.
-- Persister configuration, données et plans côté backend (API + DB).
-- Ajouter un mode multi-plans (un plan par zone/site).
+- Cette application est maintenant centrée sur la **lecture MQTT uniquement**.
+- Le navigateur ne lit pas RTSP nativement : pour un affichage vidéo réel, passer par un proxy/gateway (HLS/WebRTC) et renseigner `webUrl`.
