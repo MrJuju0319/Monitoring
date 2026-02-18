@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acre Monitoring</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Acre Monitoring</h1>
+      <p>Configuration exporter SPC, visualisation temps réel et plan image avec overlays dynamiques.</p>
+    </header>
+
+    <main class="layout">
+      <nav class="tabs" aria-label="Navigation Monitoring">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="exporter">Exporter SPC</button>
+        <button class="tab" data-tab="data">Données</button>
+        <button class="tab" data-tab="plan">Plan &amp; Overlays</button>
+        <button class="tab" data-tab="plugins">Plugins</button>
+      </nav>
+
+      <section id="dashboard" class="tab-panel active">
+        <h2>Vue monitoring</h2>
+        <div class="card-grid" id="summaryGrid"></div>
+      </section>
+
+      <section id="exporter" class="tab-panel">
+        <h2>Configuration exporter SPC → MQTT</h2>
+        <form id="exporterForm" class="card form-card wide">
+          <label>
+            Host SPC
+            <input name="spcHost" placeholder="https://spc.local" required />
+          </label>
+          <label>
+            Utilisateur SPC
+            <input name="spcUser" placeholder="installateur" required />
+          </label>
+          <label>
+            Broker MQTT (host)
+            <input name="mqttHost" placeholder="127.0.0.1" required />
+          </label>
+          <label>
+            Port MQTT
+            <input name="mqttPort" type="number" min="1" max="65535" required />
+          </label>
+          <label>
+            Base topic
+            <input name="baseTopic" placeholder="spc" required />
+          </label>
+          <label>
+            Refresh (s)
+            <input name="refresh" type="number" min="0.2" step="0.1" required />
+          </label>
+          <label class="check">
+            <input type="checkbox" name="infoZones" /> Infos zones
+          </label>
+          <label class="check">
+            <input type="checkbox" name="infoSecteurs" /> Infos secteurs
+          </label>
+          <label class="check">
+            <input type="checkbox" name="infoDoors" /> Infos portes
+          </label>
+          <label class="check">
+            <input type="checkbox" name="infoOutputs" /> Infos sorties
+          </label>
+          <button type="submit">Enregistrer la configuration</button>
+          <button type="button" id="exportConfigBtn" class="secondary">Exporter en JSON</button>
+        </form>
+
+        <article class="card">
+          <h3>JSON de configuration</h3>
+          <textarea id="configJson" rows="14" class="mono"></textarea>
+        </article>
+      </section>
+
+      <section id="data" class="tab-panel">
+        <h2>Données exporter visibles</h2>
+        <article class="card">
+          <h3>Importer des données exporter (JSON)</h3>
+          <textarea id="dataJson" rows="12" class="mono"></textarea>
+          <div class="row-actions">
+            <button id="loadDataBtn" type="button">Charger les données</button>
+            <button id="loadSampleBtn" type="button" class="secondary">Charger un exemple</button>
+          </div>
+        </article>
+
+        <div class="card-grid" id="allDataGrid"></div>
+      </section>
+
+      <section id="plan" class="tab-panel">
+        <h2>Plan image + overlays SPC</h2>
+
+        <article class="card form-card wide">
+          <label>
+            Image de fond
+            <input id="planImageInput" type="file" accept="image/*" />
+          </label>
+          <form id="overlayForm" class="nested-grid">
+            <label>
+              Catégorie
+              <select name="category" required>
+                <option value="zones">zones</option>
+                <option value="areas">areas</option>
+                <option value="doors">doors</option>
+                <option value="outputs">outputs</option>
+                <option value="controller">controller</option>
+              </select>
+            </label>
+            <label>
+              ID / clé
+              <input name="key" placeholder="Ex: 1, zone_1, systeme" required />
+            </label>
+            <label>
+              Champ
+              <input name="field" placeholder="Ex: etat_txt, state, values.status" required />
+            </label>
+            <label>
+              X (% image)
+              <input name="x" type="number" min="0" max="100" value="10" required />
+            </label>
+            <label>
+              Y (% image)
+              <input name="y" type="number" min="0" max="100" value="10" required />
+            </label>
+            <button type="submit">Ajouter overlay</button>
+          </form>
+        </article>
+
+        <article class="card plan-card">
+          <div class="plan-canvas" id="planCanvas">
+            <p class="plan-placeholder">Charge une image pour afficher les informations dessus.</p>
+          </div>
+        </article>
+
+        <div class="card-grid" id="overlayList"></div>
+      </section>
+
+      <section id="plugins" class="tab-panel">
+        <h2>Plugins disponibles / à activer</h2>
+
+        <form id="pluginForm" class="card form-card">
+          <label>
+            Type plugin
+            <select name="pluginType" required>
+              <option value="RTSP">RTSP</option>
+              <option value="Dahua">Dahua</option>
+              <option value="Hikvision">Hikvision</option>
+              <option value="Custom">Custom</option>
+            </select>
+          </label>
+
+          <label>
+            Nom affiché
+            <input name="pluginName" type="text" placeholder="Ex: Caméra Parking" required />
+          </label>
+
+          <label>
+            Endpoint / URL
+            <input name="endpoint" type="text" placeholder="rtsp://..." required />
+          </label>
+
+          <button type="submit">Ajouter le plugin</button>
+        </form>
+
+        <div class="card-grid" id="pluginGrid"></div>
+      </section>
+    </main>
+
+    <template id="simpleCardTemplate">
+      <article class="card">
+        <header>
+          <h3 class="title"></h3>
+          <span class="badge"></span>
+        </header>
+        <p class="meta"></p>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
