@@ -22,10 +22,10 @@ const cameraForm = document.getElementById('cameraForm');
 const cameraWall = document.getElementById('cameraWall');
 
 const STORAGE = {
-  mqttServers: 'acre.mqtt.servers.v2',
-  plugins: 'acre.plugins.v2',
-  cameras: 'acre.cameras.v2',
-  topicState: 'acre.topic.state.v2',
+  mqttServers: 'acre.mqtt.servers.v3',
+  plugins: 'acre.plugins.v3',
+  cameras: 'acre.cameras.v3',
+  topicState: 'acre.topic.state.v3',
   gatewayApi: 'acre.gateway.api.v1',
 };
 
@@ -59,6 +59,7 @@ let topicState = loadJSON(STORAGE.topicState, {});
 let gatewayApi = localStorage.getItem(STORAGE.gatewayApi) || 'http://127.0.0.1:8787';
 
 const mqttClients = new Map();
+let gatewayPollTimer = null;
 
 function loadJSON(key, fallback) {
   try {
@@ -84,6 +85,17 @@ function createCard(title, badge, meta) {
   node.querySelector('.badge').textContent = badge;
   node.querySelector('.meta').textContent = meta;
   return node;
+}
+
+function normalizeBrokerMode(url) {
+  const value = (url || '').trim().toLowerCase();
+  if (value.startsWith('mqtt://') || value.startsWith('mqtts://') || value.startsWith('tcp://') || value.startsWith('ssl://')) {
+    return 'gateway';
+  }
+  if (value.startsWith('ws://') || value.startsWith('wss://')) {
+    return 'browser';
+  }
+  return 'gateway';
 }
 
 function labelZoneState(state) {
@@ -114,7 +126,6 @@ function mqttIcon(topic) {
 function buildPluginData(plugin) {
   const root = `${plugin.topicRoot.replace(/\/+$/, '')}/`;
   const entries = Object.entries(topicState).filter(([topic]) => topic.startsWith(root));
-
   const data = { zones: {}, secteurs: {}, doors: {}, outputs: {}, etat: {} };
 
   for (const [topic, payload] of entries) {
@@ -133,22 +144,8 @@ function buildPluginData(plugin) {
     if (!id) continue;
     data[category] = data[category] || {};
     data[category][id] = data[category][id] || {};
-    const key = rest.join('/') || 'value';
-
-    let parsedValue = payload;
-    if (typeof payload === 'string') {
-      const trimmed = payload.trim();
-      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-        try {
-          parsedValue = JSON.parse(trimmed);
-        } catch {
-          parsedValue = payload;
-        }
-      }
-    }
-    data[category][id][key] = parsedValue;
+    data[category][id][rest.join('/') || 'value'] = payload;
   }
-
   return data;
 }
 
@@ -170,9 +167,7 @@ function renderDashboard() {
   );
 
   const decodedCards = [];
-  for (const item of decoded) {
-    const { plugin, data } = item;
-
+  for (const { plugin, data } of decoded) {
     for (const [zoneId, zone] of Object.entries(data.zones || {})) {
       decodedCards.push(
         createCard(
@@ -210,19 +205,32 @@ function renderDashboard() {
   dataGrid.replaceChildren(...rawCards.slice(0, 200));
 }
 
+async function gatewayFetch(path, options = {}) {
+  const api = gatewayApi.replace(/\/+$/, '');
+  const response = await fetch(`${api}${path}`, options);
+  if (!response.ok) {
+    const txt = await response.text();
+    throw new Error(txt || 'gateway error');
+  }
+  return response.json();
+}
+
 function renderMqttServers() {
   mqttServersGrid.replaceChildren(
     ...mqttServers.map((server) => {
-      const card = createCard(server.name, mqttClients.has(server.id) ? 'CONNECTÉ' : 'MQTT', `${server.wsUrl}`);
+      const mode = normalizeBrokerMode(server.brokerUrl);
+      const connected = mode === 'browser' ? mqttClients.has(server.id) : !!server.gatewayConnected;
+      const badge = connected ? 'CONNECTÉ' : mode === 'browser' ? 'WS' : 'MQTT';
 
+      const card = createCard(server.name, badge, `${server.brokerUrl}\nmode=${mode === 'browser' ? 'Browser WS' : 'Gateway TCP'}`);
       const row = document.createElement('div');
       row.className = 'row-actions';
 
       const connectBtn = document.createElement('button');
       connectBtn.type = 'button';
-      connectBtn.textContent = mqttClients.has(server.id) ? 'Déconnecter' : 'Connecter';
+      connectBtn.textContent = connected ? 'Déconnecter' : 'Connecter';
       connectBtn.addEventListener('click', () => {
-        if (mqttClients.has(server.id)) disconnectServer(server.id);
+        if (connected) disconnectServer(server.id);
         else connectServer(server.id);
       });
 
@@ -250,7 +258,7 @@ function renderPluginServerSelect() {
   for (const server of mqttServers) {
     const option = document.createElement('option');
     option.value = server.id;
-    option.textContent = `${server.name} (${server.wsUrl})`;
+    option.textContent = `${server.name} (${server.brokerUrl})`;
     pluginServerSelect.append(option);
   }
 }
@@ -295,16 +303,13 @@ function renderPlugins() {
 
 async function ensureGatewayCamera(cam) {
   if (cam.webUrl) return cam.webUrl;
-  const api = gatewayApi.replace(/\/+$/, '');
   try {
-    const response = await fetch(`${api}/api/cameras`, {
+    const data = await gatewayFetch('/api/cameras', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ camera_id: cam.id, rtsp_url: cam.rtspUrl }),
     });
-    if (!response.ok) throw new Error('gateway error');
-    const data = await response.json();
-    cam.webUrl = data.hls_url;
+    cam.webUrl = data.hls_url || '';
     saveJSON(STORAGE.cameras, cameras);
     return cam.webUrl;
   } catch {
@@ -328,7 +333,6 @@ function renderCameras() {
 
       const zone = document.createElement('div');
       zone.className = 'camera-feed';
-
       const info = document.createElement('p');
       info.className = 'meta';
       info.textContent = 'Initialisation flux...';
@@ -339,11 +343,10 @@ function renderCameras() {
         if (!hlsUrl) {
           const note = document.createElement('p');
           note.className = 'meta';
-          note.textContent = 'Impossible de créer le flux auto. Lance gateway_server.py puis réessaie.';
+          note.textContent = 'Impossible de créer le flux auto. Démarre gateway_server.py (Flask + ffmpeg).';
           zone.append(note);
           return;
         }
-
         const video = document.createElement('video');
         video.src = hlsUrl;
         video.controls = true;
@@ -360,9 +363,8 @@ function renderCameras() {
       del.className = 'danger';
       del.textContent = 'Supprimer caméra';
       del.addEventListener('click', async () => {
-        const api = gatewayApi.replace(/\/+$/, '');
         try {
-          await fetch(`${api}/api/cameras/${cam.id}`, { method: 'DELETE' });
+          await gatewayFetch(`/api/cameras/${cam.id}`, { method: 'DELETE' });
         } catch {
           // ignore
         }
@@ -384,16 +386,34 @@ function updateTopic(topic, payload) {
   renderDashboard();
 }
 
-function connectServer(serverId) {
-  const server = mqttServers.find((s) => s.id === serverId);
-  if (!server) return;
+async function connectViaGateway(server) {
+  try {
+    await gatewayFetch('/api/mqtt/servers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        server_id: server.id,
+        broker_url: server.brokerUrl,
+        username: server.username || '',
+        password: server.password || '',
+        topic: '#',
+      }),
+    });
+    server.gatewayConnected = true;
+    saveJSON(STORAGE.mqttServers, mqttServers);
+  } catch (error) {
+    alert(`Connexion gateway impossible: ${error.message}`);
+  }
+  renderMqttServers();
+}
 
+function connectViaBrowser(server) {
   if (!window.mqtt) {
     alert('Librairie MQTT non chargée (mqtt.min.js).');
     return;
   }
 
-  const client = window.mqtt.connect(server.wsUrl, {
+  const client = window.mqtt.connect(server.brokerUrl, {
     username: server.username || undefined,
     password: server.password || undefined,
     reconnectPeriod: 3000,
@@ -408,20 +428,57 @@ function connectServer(serverId) {
     updateTopic(topic, message.toString());
   });
 
-  client.on('error', () => {
-    renderMqttServers();
-  });
-
-  mqttClients.set(serverId, client);
+  mqttClients.set(server.id, client);
   renderMqttServers();
 }
 
-function disconnectServer(serverId) {
+function connectServer(serverId) {
+  const server = mqttServers.find((s) => s.id === serverId);
+  if (!server) return;
+
+  const mode = normalizeBrokerMode(server.brokerUrl);
+  if (mode === 'gateway') connectViaGateway(server);
+  else connectViaBrowser(server);
+}
+
+async function disconnectServer(serverId) {
+  const server = mqttServers.find((s) => s.id === serverId);
+
   const client = mqttClients.get(serverId);
-  if (!client) return;
-  client.end(true);
-  mqttClients.delete(serverId);
+  if (client) {
+    client.end(true);
+    mqttClients.delete(serverId);
+  }
+
+  if (server && server.gatewayConnected) {
+    try {
+      await gatewayFetch(`/api/mqtt/servers/${serverId}`, { method: 'DELETE' });
+    } catch {
+      // ignore
+    }
+    server.gatewayConnected = false;
+    saveJSON(STORAGE.mqttServers, mqttServers);
+  }
+
   renderMqttServers();
+}
+
+async function pollGatewayTopics() {
+  const hasGatewayServer = mqttServers.some((s) => normalizeBrokerMode(s.brokerUrl) === 'gateway' && s.gatewayConnected);
+  if (!hasGatewayServer) return;
+  try {
+    const data = await gatewayFetch('/api/mqtt/topics');
+    topicState = { ...topicState, ...(data.topics || {}) };
+    saveJSON(STORAGE.topicState, topicState);
+    renderDashboard();
+  } catch {
+    // ignore polling errors
+  }
+}
+
+function startGatewayPolling() {
+  if (gatewayPollTimer) clearInterval(gatewayPollTimer);
+  gatewayPollTimer = setInterval(pollGatewayTopics, 1500);
 }
 
 tabs.forEach((tab) => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
@@ -433,9 +490,10 @@ mqttForm.addEventListener('submit', (event) => {
   mqttServers.unshift({
     id: crypto.randomUUID(),
     name: String(formData.get('name')),
-    wsUrl: String(formData.get('wsUrl')),
+    brokerUrl: String(formData.get('brokerUrl')),
     username: String(formData.get('username') || ''),
     password: String(formData.get('password') || ''),
+    gatewayConnected: false,
   });
 
   saveJSON(STORAGE.mqttServers, mqttServers);
@@ -462,9 +520,14 @@ loadDemoBtn.addEventListener('click', () => {
   renderDashboard();
 });
 
-clearTopicsBtn.addEventListener('click', () => {
+clearTopicsBtn.addEventListener('click', async () => {
   topicState = {};
   saveJSON(STORAGE.topicState, topicState);
+  try {
+    await gatewayFetch('/api/mqtt/clear', { method: 'POST' });
+  } catch {
+    // ignore
+  }
   renderDashboard();
 });
 
@@ -520,3 +583,4 @@ renderMqttServers();
 renderPlugins();
 renderCameras();
 renderDashboard();
+startGatewayPolling();

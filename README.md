@@ -3,51 +3,51 @@
 Application web de supervision orientée **MQTT** avec :
 
 - lecture temps réel des topics MQTT,
-- plugins de type **ACRE** configurables par `topicRoot`,
+- plugins **ACRE** configurables par `topicRoot`,
 - décodage lisible (zones/secteurs/état contrôleur),
-- mur vidéo RTSP avec transcoding local automatique vers HLS.
+- mur vidéo RTSP avec passerelle locale automatique.
+
+## Important : ton format broker `mqtt://IP:PORT`
+
+✅ **Supporté**.
+
+Tu peux saisir directement un broker au format :
+
+- `mqtt://XXX.XXX.XXX.XXX:PPPPP`
+
+Le frontend le connecte via la passerelle locale `gateway_server.py` (mode TCP MQTT). Les URLs `ws://` / `wss://` restent supportées en connexion navigateur directe.
 
 ## Fonctionnalités
 
 ### 1) Dashboard
 
-- KPIs :
-  - nombre de topics reçus,
-  - plugins ACRE actifs,
-  - zones détectées,
-  - secteurs détectés,
-  - nombre de valeurs état contrôleur.
+- KPIs : topics, plugins actifs, zones, secteurs, état contrôleur.
 - Vue décodée ACRE :
-  - zones (`name`, `secteur`, `state`, `entree`),
-  - secteurs (`name`, `state`),
-  - sections `etat/*` (systeme, ethernet, alimentation, etc.).
-- Vue brute des topics MQTT avec icônes par type.
+  - zones (`name`, `secteur`, `state`, `entree`)
+  - secteurs (`name`, `state`)
+  - sections `etat/*` (système, ethernet, alimentation, etc.)
+- Vue brute des topics MQTT.
 
 ### 2) Serveurs MQTT
 
-- Ajout de serveurs MQTT en **WebSocket** (`ws://` / `wss://`).
+- Ajout serveur avec URL broker :
+  - `mqtt://...` / `mqtts://...` (via passerelle locale)
+  - `ws://...` / `wss://...` (direct navigateur)
 - Connexion / déconnexion / suppression.
-- Import de snapshot JSON (`topic -> payload`) pour test rapide.
-- Snapshot démo fourni selon le format de tes captures.
-- Bouton pour vider les topics en mémoire.
+- Import snapshot JSON (`topic -> payload`).
+- Démo préchargée.
+- Vider topics.
 
 ### 3) Plugins
 
-- Création d'un plugin:
-  - type (`ACRE`, `Custom`),
-  - nom,
-  - serveur MQTT associé,
-  - topic root (`acre_indus`, etc.).
-- Activation / désactivation.
-- Suppression plugin.
+- Plugin ACRE configurable : serveur + topic root (`acre_indus`, etc.).
+- Activation/désactivation/suppression.
 
-### 4) Mur vidéo RTSP (sans proxy externe)
+### 4) Mur vidéo RTSP
 
 - Ajout/suppression de caméras RTSP.
-- La webapp utilise une **passerelle locale incluse** (`gateway_server.py`) qui fait:
-  - `RTSP -> HLS` via `ffmpeg`,
-  - exposition des flux HLS lisibles par navigateur.
-- Tu peux aussi définir un `webUrl` manuel si tu as déjà un flux HLS.
+- La passerelle locale convertit RTSP -> HLS (via ffmpeg) et renvoie une URL lisible par navigateur.
+- `webUrl` manuelle possible si tu as déjà un flux HLS.
 
 ---
 
@@ -59,31 +59,29 @@ Application web de supervision orientée **MQTT** avec :
 python3 -m http.server 8000
 ```
 
-Ouvrir ensuite:
+Puis ouvrir `http://127.0.0.1:8000`.
 
-- `http://127.0.0.1:8000`
+### B) Passerelle locale (MQTT + vidéo)
 
-### B) Passerelle vidéo locale (obligatoire pour RTSP natif)
-
-Pré-requis:
+Pré-requis :
 
 - `python3`
-- `pip install flask`
-- `ffmpeg` installé sur la machine
+- `pip install flask paho-mqtt`
+- `ffmpeg` installé
 
-Lancement:
+Lancement :
 
 ```bash
 python3 gateway_server.py
 ```
 
-API par défaut:
+API locale par défaut :
 
 - `http://127.0.0.1:8787`
 
 ---
 
-## Exemples de topics MQTT (ACRE)
+## Exemples de topics ACRE
 
 - `acre_indus/zones/1/name`
 - `acre_indus/zones/1/secteur`
@@ -95,16 +93,9 @@ API par défaut:
 - `acre_indus/etat/ethernet/Adresse IP`
 - `acre_indus/etat/alimentation/Alimentation 230V`
 
----
+## Structure
 
-## Structure du projet
-
-- `index.html` : structure UI (dashboard, mqtt, plugins, vidéo)
-- `app.js` : logique temps réel MQTT, décodage ACRE, gestion plugins/caméras
-- `styles.css` : thème responsive
-- `gateway_server.py` : passerelle locale RTSP -> HLS
-
-## Limitations connues
-
-- Les navigateurs ne lisent pas RTSP directement. La passerelle locale règle ce point sans service proxy externe séparé.
-- La connexion MQTT côté frontend requiert un endpoint WebSocket sur ton broker.
+- `index.html` : UI
+- `app.js` : logique MQTT/plugins/caméras
+- `styles.css` : style
+- `gateway_server.py` : passerelle locale (MQTT TCP + RTSP->HLS)
