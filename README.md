@@ -28,12 +28,14 @@ Le projet inclut maintenant un script d'installation :
 Ce script :
 
 - installe les prérequis système si possible (`python3`, `venv`, `pip`, `ffmpeg`),
+- met à jour automatiquement le code depuis GitHub (`https://github.com/MrJuju0319/Monitoring`) avec branche configurable,
 - crée un environnement virtuel `.venv`,
 - installe les dépendances Python (`flask`, `paho-mqtt`),
 - valide `gateway_server.py` et `app.js`,
 - crée les scripts de lancement :
   - `bin/run_gateway.sh`
   - `bin/run_web.sh`
+  - `start.sh` (start/stop/restart/status)
 
 ### Variables utiles
 
@@ -41,12 +43,34 @@ Ce script :
 - `PYTHON_BIN=python3`
 - `WEB_PORT=8000`
 - `GATEWAY_PORT=8787`
+- `AUTO_UPDATE_FROM_GITHUB=yes|no` (défaut `yes`)
+- `UPDATE_REPO_URL=https://github.com/MrJuju0319/Monitoring`
+- `UPDATE_BRANCH=main`
 
-Exemple :
+Exemples :
 
 ```bash
 INSTALL_SYSTEM_PACKAGES=no WEB_PORT=8080 ./install.sh
 ```
+
+```bash
+UPDATE_BRANCH=develop ./install.sh
+```
+
+## Lancement simplifié
+
+Après installation, utilise le script unique :
+
+```bash
+./start.sh start
+```
+
+Commandes disponibles :
+
+- `./start.sh start`
+- `./start.sh stop`
+- `./start.sh restart`
+- `./start.sh status`
 
 ## Fonctionnalités
 
@@ -131,3 +155,4 @@ API locale par défaut :
 - `styles.css` : style
 - `gateway_server.py` : passerelle locale (MQTT TCP + RTSP->HLS)
 - `install.sh` : installation automatisée + scripts de lancement
+- `start.sh` : démarrage/arrêt/status (gateway + frontend)

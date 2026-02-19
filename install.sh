@@ -8,6 +8,11 @@ GATEWAY_PORT="${GATEWAY_PORT:-8787}"
 WEB_PORT="${WEB_PORT:-8000}"
 INSTALL_SYSTEM_PACKAGES="${INSTALL_SYSTEM_PACKAGES:-auto}"  # auto|yes|no
 
+# Auto update depuis GitHub
+AUTO_UPDATE_FROM_GITHUB="${AUTO_UPDATE_FROM_GITHUB:-yes}"   # yes|no
+UPDATE_REPO_URL="${UPDATE_REPO_URL:-https://github.com/MrJuju0319/Monitoring}"
+UPDATE_BRANCH="${UPDATE_BRANCH:-main}"
+
 log() {
   printf '\033[1;34m[install]\033[0m %s\n' "$*"
 }
@@ -31,6 +36,39 @@ need_cmd() {
   fi
 }
 
+auto_update_from_github() {
+  if [[ "$AUTO_UPDATE_FROM_GITHUB" != "yes" ]]; then
+    log "Auto update GitHub désactivé (AUTO_UPDATE_FROM_GITHUB=$AUTO_UPDATE_FROM_GITHUB)"
+    return
+  fi
+
+  if ! has_cmd git; then
+    warn "git non disponible, auto update ignoré"
+    return
+  fi
+
+  if [[ ! -d "$PROJECT_DIR/.git" ]]; then
+    warn "Dépôt git introuvable dans $PROJECT_DIR, auto update ignoré"
+    return
+  fi
+
+  log "Auto update depuis $UPDATE_REPO_URL (branche: $UPDATE_BRANCH)"
+
+  # Conserve l'état local autant que possible (pas de reset destructif)
+  if ! git -C "$PROJECT_DIR" fetch "$UPDATE_REPO_URL" "$UPDATE_BRANCH"; then
+    warn "fetch impossible, on continue sans auto update"
+    return
+  fi
+
+  # Essai de fast-forward sur la branche courante
+  if ! git -C "$PROJECT_DIR" merge --ff-only FETCH_HEAD; then
+    warn "Fast-forward impossible (modifs locales / divergence). Auto update ignoré sans échec."
+    return
+  fi
+
+  log "Auto update appliqué avec succès"
+}
+
 install_system_packages() {
   local use_sudo=""
   if has_cmd sudo; then
@@ -38,31 +76,31 @@ install_system_packages() {
   fi
 
   if has_cmd apt-get; then
-    log "Installation paquets système via apt (python3-venv, python3-pip, ffmpeg)"
+    log "Installation paquets système via apt (python3-venv, python3-pip, ffmpeg, git)"
     ${use_sudo} apt-get update
-    ${use_sudo} apt-get install -y python3 python3-venv python3-pip ffmpeg
+    ${use_sudo} apt-get install -y python3 python3-venv python3-pip ffmpeg git
     return
   fi
 
   if has_cmd dnf; then
-    log "Installation paquets système via dnf (python3, python3-pip, ffmpeg)"
-    ${use_sudo} dnf install -y python3 python3-pip ffmpeg
+    log "Installation paquets système via dnf (python3, python3-pip, ffmpeg, git)"
+    ${use_sudo} dnf install -y python3 python3-pip ffmpeg git
     return
   fi
 
   if has_cmd yum; then
-    log "Installation paquets système via yum (python3, python3-pip, ffmpeg)"
-    ${use_sudo} yum install -y python3 python3-pip ffmpeg
+    log "Installation paquets système via yum (python3, python3-pip, ffmpeg, git)"
+    ${use_sudo} yum install -y python3 python3-pip ffmpeg git
     return
   fi
 
   if has_cmd pacman; then
-    log "Installation paquets système via pacman (python, python-pip, ffmpeg)"
-    ${use_sudo} pacman -Sy --noconfirm python python-pip ffmpeg
+    log "Installation paquets système via pacman (python, python-pip, ffmpeg, git)"
+    ${use_sudo} pacman -Sy --noconfirm python python-pip ffmpeg git
     return
   fi
 
-  warn "Gestionnaire de paquets non reconnu. Installe manuellement: python3, python3-venv, pip, ffmpeg."
+  warn "Gestionnaire de paquets non reconnu. Installe manuellement: python3, python3-venv, pip, ffmpeg, git."
 }
 
 maybe_install_system() {
@@ -74,7 +112,7 @@ maybe_install_system() {
       log "Skip installation paquets système (INSTALL_SYSTEM_PACKAGES=no)"
       ;;
     auto)
-      if ! has_cmd ffmpeg || ! has_cmd "$PYTHON_BIN"; then
+      if ! has_cmd ffmpeg || ! has_cmd "$PYTHON_BIN" || ! has_cmd git; then
         install_system_packages
       else
         log "Paquets système déjà disponibles"
@@ -140,6 +178,7 @@ RUN
   log "Scripts de lancement créés:"
   log "- $PROJECT_DIR/bin/run_gateway.sh"
   log "- $PROJECT_DIR/bin/run_web.sh"
+  log "- $PROJECT_DIR/start.sh"
 }
 
 print_next_steps() {
@@ -147,7 +186,16 @@ print_next_steps() {
 
 Installation terminée ✅
 
-Démarrage:
+Démarrage (recommandé):
+  $PROJECT_DIR/start.sh start
+
+Stop:
+  $PROJECT_DIR/start.sh stop
+
+Status:
+  $PROJECT_DIR/start.sh status
+
+Ou manuellement:
   1) Gateway (MQTT + RTSP->HLS)
      $PROJECT_DIR/bin/run_gateway.sh
 
@@ -166,6 +214,7 @@ STEPS
 main() {
   log "Installation Acre MQTT Monitoring"
   maybe_install_system
+  auto_update_from_github
   create_venv
   validate_install
   create_run_scripts
