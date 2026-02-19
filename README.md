@@ -29,6 +29,7 @@ Ce script :
 
 - installe les prérequis système si possible (`python3`, `venv`, `pip`, `ffmpeg`),
 - met à jour automatiquement le code depuis GitHub (`https://github.com/MrJuju0319/Monitoring`) avec branche configurable,
+- utilise une détection robuste des commandes système (évite l'erreur `has_cmd: command not found`),
 - crée un environnement virtuel `.venv`,
 - installe les dépendances Python (`flask`, `paho-mqtt`),
 - valide `gateway_server.py` et `app.js`,

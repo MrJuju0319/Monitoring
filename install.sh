@@ -25,12 +25,12 @@ err() {
   printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2
 }
 
-has_cmd() {
+cmd_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
-need_cmd() {
-  if ! has_cmd "$1"; then
+require_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
     err "Commande requise manquante: $1"
     exit 1
   fi
@@ -42,7 +42,7 @@ auto_update_from_github() {
     return
   fi
 
-  if ! has_cmd git; then
+  if ! command -v git >/dev/null 2>&1; then
     warn "git non disponible, auto update ignoré"
     return
   fi
@@ -54,13 +54,11 @@ auto_update_from_github() {
 
   log "Auto update depuis $UPDATE_REPO_URL (branche: $UPDATE_BRANCH)"
 
-  # Conserve l'état local autant que possible (pas de reset destructif)
   if ! git -C "$PROJECT_DIR" fetch "$UPDATE_REPO_URL" "$UPDATE_BRANCH"; then
     warn "fetch impossible, on continue sans auto update"
     return
   fi
 
-  # Essai de fast-forward sur la branche courante
   if ! git -C "$PROJECT_DIR" merge --ff-only FETCH_HEAD; then
     warn "Fast-forward impossible (modifs locales / divergence). Auto update ignoré sans échec."
     return
@@ -71,30 +69,30 @@ auto_update_from_github() {
 
 install_system_packages() {
   local use_sudo=""
-  if has_cmd sudo; then
+  if command -v sudo >/dev/null 2>&1; then
     use_sudo="sudo"
   fi
 
-  if has_cmd apt-get; then
+  if command -v apt-get >/dev/null 2>&1; then
     log "Installation paquets système via apt (python3-venv, python3-pip, ffmpeg, git)"
     ${use_sudo} apt-get update
     ${use_sudo} apt-get install -y python3 python3-venv python3-pip ffmpeg git
     return
   fi
 
-  if has_cmd dnf; then
+  if command -v dnf >/dev/null 2>&1; then
     log "Installation paquets système via dnf (python3, python3-pip, ffmpeg, git)"
     ${use_sudo} dnf install -y python3 python3-pip ffmpeg git
     return
   fi
 
-  if has_cmd yum; then
+  if command -v yum >/dev/null 2>&1; then
     log "Installation paquets système via yum (python3, python3-pip, ffmpeg, git)"
     ${use_sudo} yum install -y python3 python3-pip ffmpeg git
     return
   fi
 
-  if has_cmd pacman; then
+  if command -v pacman >/dev/null 2>&1; then
     log "Installation paquets système via pacman (python, python-pip, ffmpeg, git)"
     ${use_sudo} pacman -Sy --noconfirm python python-pip ffmpeg git
     return
@@ -112,7 +110,7 @@ maybe_install_system() {
       log "Skip installation paquets système (INSTALL_SYSTEM_PACKAGES=no)"
       ;;
     auto)
-      if ! has_cmd ffmpeg || ! has_cmd "$PYTHON_BIN" || ! has_cmd git; then
+      if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v "$PYTHON_BIN" >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
         install_system_packages
       else
         log "Paquets système déjà disponibles"
@@ -126,7 +124,7 @@ maybe_install_system() {
 }
 
 create_venv() {
-  need_cmd "$PYTHON_BIN"
+  require_cmd "$PYTHON_BIN"
   if [[ ! -d "$VENV_DIR" ]]; then
     log "Création virtualenv: $VENV_DIR"
     "$PYTHON_BIN" -m venv "$VENV_DIR"
@@ -146,10 +144,10 @@ validate_install() {
   log "Validation Python"
   "$VENV_DIR/bin/python" -m py_compile "$PROJECT_DIR/gateway_server.py"
   log "Validation JavaScript"
-  need_cmd node
+  require_cmd node
   node --check "$PROJECT_DIR/app.js"
 
-  if has_cmd ffmpeg; then
+  if command -v ffmpeg >/dev/null 2>&1; then
     log "ffmpeg détecté: $(ffmpeg -version | head -n 1)"
   else
     warn "ffmpeg non détecté: la partie vidéo RTSP->HLS ne fonctionnera pas"
