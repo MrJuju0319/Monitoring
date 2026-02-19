@@ -17,6 +17,37 @@ Tu peux saisir directement un broker au format :
 
 Le frontend le connecte via la passerelle locale `gateway_server.py` (mode TCP MQTT). Les URLs `ws://` / `wss://` restent supportées en connexion navigateur directe.
 
+## Installation automatique (script)
+
+Le projet inclut maintenant un script d'installation :
+
+```bash
+./install.sh
+```
+
+Ce script :
+
+- installe les prérequis système si possible (`python3`, `venv`, `pip`, `ffmpeg`),
+- crée un environnement virtuel `.venv`,
+- installe les dépendances Python (`flask`, `paho-mqtt`),
+- valide `gateway_server.py` et `app.js`,
+- crée les scripts de lancement :
+  - `bin/run_gateway.sh`
+  - `bin/run_web.sh`
+
+### Variables utiles
+
+- `INSTALL_SYSTEM_PACKAGES=auto|yes|no` (défaut `auto`)
+- `PYTHON_BIN=python3`
+- `WEB_PORT=8000`
+- `GATEWAY_PORT=8787`
+
+Exemple :
+
+```bash
+INSTALL_SYSTEM_PACKAGES=no WEB_PORT=8080 ./install.sh
+```
+
 ## Fonctionnalités
 
 ### 1) Dashboard
@@ -51,7 +82,7 @@ Le frontend le connecte via la passerelle locale `gateway_server.py` (mode TCP M
 
 ---
 
-## Démarrage
+## Démarrage manuel
 
 ### A) Frontend
 
@@ -99,3 +130,4 @@ API locale par défaut :
 - `app.js` : logique MQTT/plugins/caméras
 - `styles.css` : style
 - `gateway_server.py` : passerelle locale (MQTT TCP + RTSP->HLS)
+- `install.sh` : installation automatisée + scripts de lancement
