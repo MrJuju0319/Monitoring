@@ -7,9 +7,21 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <div id="login-view" class="login-view">
+      <form id="login-form" class="login-card">
+        <h1>Connexion Monitoring</h1>
+        <p>Admin: <code>admin/admin123</code> · User: <code>user/user123</code></p>
+        <label>Utilisateur <input id="username" required value="admin" /></label>
+        <label>Mot de passe <input id="password" type="password" required value="admin123" /></label>
+        <button type="submit">Se connecter</button>
+        <p id="login-error" class="error"></p>
+      </form>
+    </div>
+
+    <div id="app" class="app-shell hidden">
       <aside class="sidebar">
         <h1>Supervision</h1>
+        <p id="current-user"></p>
         <nav>
           <button class="nav-btn active" data-page="dashboard">Dashboard</button>
           <button class="nav-btn" data-page="plans">Plans</button>
@@ -21,7 +33,10 @@
       <main class="content">
         <header class="topbar">
           <h2 id="page-title">Dashboard</h2>
-          <span id="connection-status" class="badge ok">Temps réel: connecté</span>
+          <div class="header-right">
+            <span id="connection-status" class="badge ok">Temps réel: connecté</span>
+            <button id="logout-btn" class="tab-btn">Déconnexion</button>
+          </div>
         </header>
 
         <section id="dashboard" class="page active">
@@ -29,8 +44,7 @@
           <div class="panel">
             <div class="panel-header">
               <h3>Historique capteurs</h3>
-              <label>
-                Fenêtre
+              <label>Fenêtre
                 <select id="history-range">
                   <option value="15">15 min</option>
                   <option value="60" selected>60 min</option>
@@ -47,7 +61,7 @@
         <section id="plans" class="page">
           <div class="panel-header">
             <div id="plan-tabs" class="tabs"></div>
-            <div class="edit-actions">
+            <div id="edit-actions" class="edit-actions">
               <button id="edit-mode-toggle" class="tab-btn">Mode édition: OFF</button>
               <button id="save-plan-btn" class="tab-btn">Sauvegarder positions</button>
             </div>

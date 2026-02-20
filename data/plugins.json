@@ -38,5 +38,22 @@
       "layout": "grid",
       "maxVisible": 4
     }
+  },
+  {
+    "id": "mqtt-io",
+    "name": "MQTT I/O",
+    "description": "Abonnement MQTT (binaire/numérique/texte) et publication de commandes",
+    "enabled": false,
+    "config": {
+      "brokerUrl": "mqtt://broker.hivemq.com:1883",
+      "username": "",
+      "password": "",
+      "subscribeTopic": "monitoring/demo/in",
+      "publishTopic": "monitoring/demo/out",
+      "dataType": "binary",
+      "unit": "",
+      "qos": 0,
+      "retain": false
+    }
   }
 ]

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0] - 2026-02-20
+
+### Added
+- Système d’authentification avec rôles `admin` et `user`.
+- Protection des endpoints d’édition pour que seul `admin` puisse modifier/publier.
+- Vue de connexion + gestion de session côté frontend.
+- Nouveau plugin `MQTT I/O` configurable depuis le web.
+- Intégration MQTT backend (connexion broker, souscription topic, parsing binaire/numérique/texte, unité).
+- Endpoint de publication MQTT pour le contrôle: `POST /api/plugins/mqtt-io/publish`.
+- Rendu du statut runtime MQTT dans l’onglet configuration et dans l’état équipements.
+- Ajout de `data/users.json` avec comptes de démonstration.
+
+### Changed
+- UI adaptée au rôle courant: mode lecture seule pour `user`, édition complète pour `admin`.
+- WebSocket protégé via token d’authentification.
+- Documentation README mise à jour pour auth + MQTT.
+
 ## [0.2.0] - 2026-02-20
 
 ### Added

@@ -2,28 +2,38 @@
 
 Interface de supervision web moderne pour piloter et visualiser des modules/plugins en temps réel, avec pages **Dashboard**, **Plans**, **État équipements** et **Configuration**.
 
+## Nouveautés principales
+
+- **Authentification avec rôles** :
+  - `admin` : peut configurer, éditer les capteurs, publier MQTT.
+  - `user` : lecture seule (visualisation uniquement).
+- **Plugin MQTT I/O** configurable en web :
+  - abonnement à un topic MQTT,
+  - prise en charge de 3 types de données (`binary`, `numeric`, `text`),
+  - option d’**unité** (ex: °C, %, V),
+  - publication de valeurs de commande vers un topic MQTT.
+
+## Comptes de démonstration
+
+- Admin: `admin / admin123`
+- User: `user / user123`
+
 ## Fonctionnalités
 
 - Dashboard global avec résumé des modules, plans, caméras et alertes.
-- Historique d’état des capteurs sur une fenêtre de temps configurable (15 min, 60 min, 4 h, 12 h).
+- Historique d’état des capteurs sur une fenêtre de temps configurable.
 - Page Plans avec onglet par plan et superposition des zones en état `ok/warning/critical`.
-- **Mode édition des capteurs** (drag & drop) et sauvegarde persistée des positions.
-- Onglet **État équipements** auto-complété à partir des données monitoring/plugins :
-  - nombre de caméras en ligne / maximum,
-  - liste des caméras avec pastille verte/rouge,
-  - état des plugins actifs/inactifs.
-- Page Configuration permettant :
-  - activation/désactivation des modules/plugins,
-  - édition rapide de la configuration JSON de chaque plugin depuis l’interface.
-- Mise à jour temps réel via WebSocket (`/ws`).
+- Mode édition des capteurs (drag & drop) + sauvegarde persistée des positions (**admin uniquement**).
+- Onglet **État équipements** auto-complété (caméras online/max, liste caméras, plugins actifs/inactifs).
+- Configuration plugins depuis l’UI (activation/désactivation + JSON config, **admin uniquement**).
+- Mise à jour temps réel via WebSocket.
 - Interface responsive (desktop/tablette/mobile).
-- Données persistées dans `data/*.json`.
 
 ## Architecture
 
-- `server.js` : API REST + WebSocket + service des fichiers statiques.
-- `public/` : frontend HTML/CSS/JS (SPA légère sans framework).
-- `data/` : données modules/plans/caméras.
+- `server.js` : API REST + WebSocket + auth + intégration MQTT.
+- `public/` : frontend HTML/CSS/JS.
+- `data/` : données modules/plans/caméras/utilisateurs.
 
 ## Installation
 
@@ -41,22 +51,39 @@ Puis ouvrir : `http://localhost:3000`.
 
 ## API rapide
 
+### Auth
+- `POST /api/auth/login`
+- `GET /api/me`
+
+### Monitoring
 - `GET /api/dashboard`
 - `GET /api/plugins`
-- `PATCH /api/plugins/:id/enabled`
-- `PUT /api/plugins/:id/config`
+- `PATCH /api/plugins/:id/enabled` (**admin**)
+- `PUT /api/plugins/:id/config` (**admin**)
+- `POST /api/plugins/mqtt-io/publish` (**admin**)
 - `GET /api/plans`
-- `POST /api/plans/:id/zones/positions`
+- `POST /api/plans/:id/zones/positions` (**admin**)
 - `GET /api/cameras`
 - `GET /api/equipment-status`
 - `GET /api/history?minutes=60`
 - `GET /api/health`
 
-## Notes
+## Plugin MQTT I/O
 
-- Les états des zones sont simulés toutes les 3 secondes pour démonstration.
-- Les événements d’historique sont enregistrés en mémoire côté serveur et consultables sur période (`/api/history`).
-- Les flux caméra utilisent des URLs de démonstration (peuvent être remplacées dans `data/cameras.json`).
+Configuration via l’onglet Configuration > module `MQTT I/O`:
+- `brokerUrl`
+- `username` / `password`
+- `subscribeTopic`
+- `publishTopic`
+- `dataType` (`binary`, `numeric`, `text`)
+- `unit`
+- `qos`
+- `retain`
+
+Comportements:
+- `binary` : normalisé en `0|1`.
+- `numeric` : borné de `0` à `4`.
+- `text` : chaîne libre.
 
 ## Règle de contribution
 
