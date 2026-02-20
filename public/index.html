@@ -13,6 +13,7 @@
         <nav>
           <button class="nav-btn active" data-page="dashboard">Dashboard</button>
           <button class="nav-btn" data-page="plans">Plans</button>
+          <button class="nav-btn" data-page="equipment">État équipements</button>
           <button class="nav-btn" data-page="config">Configuration</button>
         </nav>
       </aside>
@@ -26,17 +27,47 @@
         <section id="dashboard" class="page active">
           <div class="cards-grid" id="summary-cards"></div>
           <div class="panel">
-            <h3>Événements récents</h3>
+            <div class="panel-header">
+              <h3>Historique capteurs</h3>
+              <label>
+                Fenêtre
+                <select id="history-range">
+                  <option value="15">15 min</option>
+                  <option value="60" selected>60 min</option>
+                  <option value="240">4 h</option>
+                  <option value="720">12 h</option>
+                </select>
+              </label>
+            </div>
+            <div id="history-summary" class="history-summary"></div>
             <ul id="event-log" class="event-log"></ul>
           </div>
         </section>
 
         <section id="plans" class="page">
-          <div id="plan-tabs" class="tabs"></div>
+          <div class="panel-header">
+            <div id="plan-tabs" class="tabs"></div>
+            <div class="edit-actions">
+              <button id="edit-mode-toggle" class="tab-btn">Mode édition: OFF</button>
+              <button id="save-plan-btn" class="tab-btn">Sauvegarder positions</button>
+            </div>
+          </div>
           <div id="plan-canvas" class="plan-canvas"></div>
           <div class="panel">
             <h3>Caméras (aperçu)</h3>
             <div id="camera-grid" class="camera-grid"></div>
+          </div>
+        </section>
+
+        <section id="equipment" class="page">
+          <div class="cards-grid" id="equipment-cards"></div>
+          <div class="panel">
+            <h3>Caméras (auto-complété plugins)</h3>
+            <ul id="equipment-camera-list" class="equipment-list"></ul>
+          </div>
+          <div class="panel">
+            <h3>Plugins</h3>
+            <ul id="equipment-plugin-list" class="equipment-list"></ul>
           </div>
         </section>
 
