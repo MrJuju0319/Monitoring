@@ -2,19 +2,52 @@ const path = require('node:path');
 const express = require('express');
 const { RealtimeBus } = require('./services/realtime-bus');
 const { MqttMapPlugin } = require('../../plugins/mqtt-map');
+const { CameraRtspPlugin } = require('../../plugins/camera-rtsp');
 
 const app = express();
-const realtimeBus = new RealtimeBus();
-const plugin = new MqttMapPlugin({ realtimeBus });
+app.use(express.json());
 
-plugin.start();
+const realtimeBus = new RealtimeBus();
+const mqttMapPlugin = new MqttMapPlugin({ realtimeBus });
+const cameraRtspPlugin = new CameraRtspPlugin({ realtimeBus });
+
+mqttMapPlugin.start();
+cameraRtspPlugin.start();
 
 app.use(express.static(path.resolve(__dirname, '../../frontend/plans')));
 
 app.get('/api/points', (_req, res) => {
   res.json({
-    points: plugin.getPoints(),
+    points: mqttMapPlugin.getPoints(),
   });
+});
+
+app.get('/api/cameras', (_req, res) => {
+  res.json({
+    cameras: cameraRtspPlugin.getCameras(),
+  });
+});
+
+app.post('/api/cameras/:cameraId/heartbeat', (req, res) => {
+  const ok = cameraRtspPlugin.reportHeartbeat(req.params.cameraId);
+  if (!ok) {
+    return res.status(404).json({ error: 'camera_not_found' });
+  }
+
+  return res.json({ status: 'ok' });
+});
+
+app.post('/api/cameras/:cameraId/error', (req, res) => {
+  const ok = cameraRtspPlugin.reportError(req.params.cameraId, {
+    code: req.body?.code,
+    message: req.body?.message,
+  });
+
+  if (!ok) {
+    return res.status(404).json({ error: 'camera_not_found' });
+  }
+
+  return res.json({ status: 'ok' });
 });
 
 app.get('/api/stream', (req, res) => {
@@ -38,6 +71,7 @@ app.listen(port, '0.0.0.0', () => {
 });
 
 process.on('SIGINT', () => {
-  plugin.stop();
+  mqttMapPlugin.stop();
+  cameraRtspPlugin.stop();
   process.exit(0);
 });

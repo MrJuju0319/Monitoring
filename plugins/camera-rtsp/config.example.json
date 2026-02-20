@@ -1,0 +1,56 @@
+{
+  "defaults": {
+    "transport": "tcp",
+    "healthCheckIntervalMs": 15000,
+    "offlineAfterMs": 45000,
+    "reconnectDelayMs": 5000,
+    "startupDelayMs": 1000,
+    "conversion": {
+      "strategy": "hls",
+      "hlsSegmentSeconds": 2,
+      "mseCodec": "video/mp4; codecs=\"avc1.64001F\"",
+      "webrtcSignalingUrl": ""
+    }
+  },
+  "streams": [
+    {
+      "id": "cam-entrance",
+      "name": "Entrée principale",
+      "rtspUrl": "rtsp://user:password@192.168.1.10:554/stream1",
+      "widget": {
+        "x": 18,
+        "y": 22,
+        "width": 32,
+        "height": 26,
+        "zIndex": 3
+      },
+      "conversion": {
+        "strategy": "hls",
+        "publicUrl": "/streams/cam-entrance/index.m3u8",
+        "codec": "h264+aac"
+      },
+      "timeouts": {
+        "offlineAfterMs": 30000,
+        "reconnectDelayMs": 4000
+      }
+    },
+    {
+      "id": "cam-warehouse",
+      "name": "Zone stock",
+      "rtspUrl": "rtsp://user:password@192.168.1.20:554/live",
+      "widget": {
+        "x": 64,
+        "y": 58,
+        "width": 30,
+        "height": 24,
+        "zIndex": 2
+      },
+      "conversion": {
+        "strategy": "webrtc",
+        "publicUrl": "wss://media.example.com/webrtc/cam-warehouse",
+        "codec": "h264+opus",
+        "signalingUrl": "wss://media.example.com/ws"
+      }
+    }
+  ]
+}
