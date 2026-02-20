@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monitoring - MQTT Map</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Inter, Arial, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      .container {
+        max-width: 980px;
+        margin: 40px auto;
+        padding: 0 16px;
+      }
+      .plan {
+        position: relative;
+        height: 560px;
+        border-radius: 12px;
+        background: linear-gradient(130deg, #1e293b 0%, #0f172a 100%);
+        border: 1px solid #334155;
+      }
+      .point {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        min-width: 120px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+      }
+      .point small {
+        display: block;
+        opacity: 0.85;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .status {
+        margin-top: 12px;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Plan dynamique (mqtt-map)</h1>
+      <section id="plan" class="plan"></section>
+      <p id="status" class="status">Connexion au flux temps réel…</p>
+    </main>
+
+    <script>
+      const plan = document.getElementById('plan');
+      const statusEl = document.getElementById('status');
+      const pointElements = new Map();
+
+      function renderPoint(point) {
+        let el = pointElements.get(point.id);
+        if (!el) {
+          el = document.createElement('article');
+          el.className = 'point';
+          pointElements.set(point.id, el);
+          plan.appendChild(el);
+        }
+
+        el.style.left = `${point.x}%`;
+        el.style.top = `${point.y}%`;
+        el.style.background = point.color;
+        el.innerHTML = `${point.icon} ${point.label}<small>${point.sourceTopic}</small>`;
+      }
+
+      fetch('/api/points')
+        .then((response) => response.json())
+        .then((data) => data.points.forEach(renderPoint))
+        .catch(() => {
+          statusEl.textContent = 'Impossible de charger les points initiaux.';
+        });
+
+      const eventSource = new EventSource('/api/stream');
+      eventSource.addEventListener('ready', () => {
+        statusEl.textContent = 'Flux temps réel connecté.';
+      });
+
+      eventSource.addEventListener('point_update', (event) => {
+        const point = JSON.parse(event.data);
+        renderPoint(point);
+      });
+
+      eventSource.onerror = () => {
+        statusEl.textContent = 'Flux interrompu, tentative de reconnexion…';
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "broker": {
+    "url": "mqtts://localhost:8883",
+    "clientId": "monitoring-mqtt-map",
+    "username": "monitoring",
+    "password": "change_me",
+    "tls": {
+      "caFile": "certs/ca.crt",
+      "certFile": "certs/client.crt",
+      "keyFile": "certs/client.key"
+    }
+  },
+  "subscriptions": [
+    { "topic": "site/zone-a/sensor/door", "qos": 1 },
+    { "topic": "site/zone-a/sensor/temp", "qos": 1 }
+  ],
+  "points": [
+    {
+      "id": "door-a1",
+      "x": 18,
+      "y": 42,
+      "icon": "🚪",
+      "color": "#9ca3af",
+      "label": "Porte A1",
+      "sourceTopic": "site/zone-a/sensor/door"
+    },
+    {
+      "id": "temp-a1",
+      "x": 62,
+      "y": 33,
+      "icon": "🌡️",
+      "color": "#9ca3af",
+      "label": "Température A1",
+      "sourceTopic": "site/zone-a/sensor/temp"
+    }
+  ],
+  "mappings": [
+    {
+      "topic": "site/zone-a/sensor/door",
+      "pointId": "door-a1",
+      "statusField": "state",
+      "states": {
+        "open": { "color": "#ef4444", "icon": "🚪", "labelPrefix": "Ouverte" },
+        "closed": { "color": "#22c55e", "icon": "🔒", "labelPrefix": "Fermée" }
+      },
+      "defaultState": { "color": "#f59e0b", "icon": "❔", "labelPrefix": "Inconnu" }
+    },
+    {
+      "topic": "site/zone-a/sensor/temp",
+      "pointId": "temp-a1",
+      "statusField": "level",
+      "states": {
+        "normal": { "color": "#22c55e", "icon": "🌡️", "labelPrefix": "OK" },
+        "warning": { "color": "#f59e0b", "icon": "⚠️", "labelPrefix": "Alerte" },
+        "critical": { "color": "#ef4444", "icon": "🔥", "labelPrefix": "Critique" }
+      },
+      "defaultState": { "color": "#9ca3af", "icon": "🌡️", "labelPrefix": "Sans données" }
+    }
+  ]
+}

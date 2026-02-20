@@ -12,9 +12,5 @@ fi
 echo "[INFO] Démarrage local du backend (mode développement)..."
 echo "[INFO] Utiliser le fichier de config: ${CONFIG_FILE}"
 
-echo "[TODO] Brancher la commande réelle de lancement backend ici"
-# Exemple: node backend/src/index.js --config "$CONFIG_FILE"
-
-echo "[INFO] Démarrage local du frontend (mode développement)..."
-echo "[TODO] Brancher la commande réelle de lancement frontend ici"
-# Exemple: npm --prefix frontend run dev
+cd "$ROOT_DIR"
+node backend/api/server.js
