@@ -1,91 +1,146 @@
 # Monitoring
 
-Monorepo de base pour une plateforme de monitoring avec séparation nette entre backend, frontend et plugins métier.
+Plateforme de monitoring avec un plugin `mqtt-map` qui transforme des messages MQTT en états visuels en temps réel sur un plan.
 
-## Prérequis
+## Nouveautés implémentées
 
-- Git
-- Bash (Linux/macOS/WSL)
-- Docker + Docker Compose (recommandé pour la DB/MQTT en local)
-- Runtime backend/frontend selon vos choix techniques (Node.js, Java, etc.)
+- Plugin `plugins/mqtt-map` avec :
+  - connexion broker MQTT (TLS + authentification),
+  - abonnement à plusieurs topics,
+  - transformation payload MQTT → état visuel de points.
+- Modèle de données formel des points dans `plugins/mqtt-map/points.model.json`.
+- API temps réel SSE (`/api/stream`) pour pousser les changements au frontend.
+- Frontend plan dynamique (`frontend/plans/index.html`) qui affiche les points et se met à jour en live.
 
 ## Arborescence
 
 ```text
 .
 ├── backend/
-│   ├── api/
-│   ├── auth/
-│   ├── auto-update/
-│   ├── db/
-│   └── plugins/
+│   └── api/
+│       ├── server.js
+│       └── services/
+│           └── realtime-bus.js
 ├── config/
 │   ├── config.example.env
 │   └── config.example.yaml
 ├── frontend/
-│   ├── cameras/
-│   ├── plans/
-│   ├── ui/
-│   └── widgets/
+│   └── plans/
+│       └── index.html
 ├── plugins/
+│   └── mqtt-map/
+│       ├── config.example.json
+│       ├── index.js
+│       └── points.model.json
 ├── scripts/
 │   ├── start-local.sh
 │   └── start-prod.sh
-└── README.md
+└── package.json
 ```
 
-## Configuration centralisée
+## Installation
 
-Les exemples de configuration sont fournis ici :
+```bash
+npm install
+```
 
-- `config/config.example.yaml`
-- `config/config.example.env`
+## Lancement
 
-Ces fichiers couvrent :
-
-- Base de données (DB)
-- MQTT
-- Auto-update
-- Authentification
-- Chargement des plugins
-
-### Mise en place locale
-
-1. Copier la configuration :
-
-   ```bash
-   cp config/config.example.yaml config/config.local.yaml
-   cp config/config.example.env config/.env.local
-   ```
-
-2. Adapter les valeurs à votre environnement.
-
-### Mise en place production
-
-1. Créer `config/config.prod.yaml` depuis `config/config.example.yaml`.
-2. Externaliser les secrets (vault, variables d'environnement, secret manager).
-3. Ne jamais versionner les secrets réels.
-
-## Scripts de démarrage
-
-### Démarrage local
+### Local
 
 ```bash
 ./scripts/start-local.sh
 ```
 
-Ce script :
+Puis ouvrir :
 
-- initialise un `config/config.local.yaml` si absent,
-- prépare le lancement backend et frontend en mode développement (points de branchement `TODO` inclus).
+- `http://localhost:8080` (plan dynamique)
+- `http://localhost:8080/api/points` (état actuel des points)
+- `http://localhost:8080/api/stream` (flux SSE temps réel)
 
-### Démarrage production
+### Production
 
 ```bash
 ./scripts/start-prod.sh
 ```
 
-Ce script :
+## Plugin `mqtt-map`
 
-- vérifie la présence de `config/config.prod.yaml`,
-- prépare le lancement backend/frontend en mode production (points de branchement `TODO` inclus).
+### Variables d'environnement supportées
+
+- `MQTT_MAP_BROKER_URL` (ex: `mqtts://broker.exemple.com:8883`)
+- `MQTT_MAP_CLIENT_ID`
+- `MQTT_MAP_USERNAME`
+- `MQTT_MAP_PASSWORD`
+- `MQTT_MAP_CA_FILE`
+- `MQTT_MAP_CERT_FILE`
+- `MQTT_MAP_KEY_FILE`
+- `MQTT_MAP_REJECT_UNAUTHORIZED` (`false` pour désactiver la validation TLS)
+
+### Modèle de données des points
+
+Chaque point visuel contient :
+
+- `id`: identifiant unique,
+- `x`, `y`: position sur le plan (0 à 100, en pourcentage),
+- `icon`: icône affichée,
+- `color`: couleur de l'état,
+- `label`: texte affiché,
+- `sourceTopic`: topic MQTT source,
+- `status`, `lastPayload`, `lastUpdate`: métadonnées runtime.
+
+Le schéma JSON complet est disponible dans `plugins/mqtt-map/points.model.json`.
+
+## Exemples de mapping MQTT
+
+Fichier : `plugins/mqtt-map/config.example.json`
+
+### 1) Capteur porte
+
+Topic : `site/zone-a/sensor/door`
+
+Payload attendu :
+
+```json
+{ "state": "open" }
+```
+
+Règles :
+
+- `open` → rouge `#ef4444`, icône `🚪`, préfixe `Ouverte`
+- `closed` → vert `#22c55e`, icône `🔒`, préfixe `Fermée`
+- défaut → orange `#f59e0b`, icône `❔`, préfixe `Inconnu`
+
+### 2) Capteur température
+
+Topic : `site/zone-a/sensor/temp`
+
+Payload attendu :
+
+```json
+{ "level": "critical" }
+```
+
+Règles :
+
+- `normal` → vert `#22c55e`, icône `🌡️`, préfixe `OK`
+- `warning` → orange `#f59e0b`, icône `⚠️`, préfixe `Alerte`
+- `critical` → rouge `#ef4444`, icône `🔥`, préfixe `Critique`
+- défaut → gris `#9ca3af`, icône `🌡️`, préfixe `Sans données`
+
+## API temps réel
+
+### `GET /api/points`
+
+Retourne l'état courant de tous les points.
+
+### `GET /api/stream`
+
+Flux SSE qui envoie :
+
+- `ready` à la connexion,
+- `point_update` à chaque message MQTT transformé.
+
+## Notes
+
+- Aucun système de commandes/permissions/PlaceholderAPI n'est concerné ici (ce projet n'est pas un plugin Minecraft/PaperMC).

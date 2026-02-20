@@ -11,8 +11,5 @@ fi
 
 echo "[INFO] Démarrage production avec ${CONFIG_FILE}"
 
-echo "[TODO] Brancher la commande réelle backend en mode production"
-# Exemple: NODE_ENV=production node backend/src/index.js --config "$CONFIG_FILE"
-
-echo "[TODO] Brancher la commande réelle frontend en mode production"
-# Exemple: npm --prefix frontend run start
+cd "$ROOT_DIR"
+NODE_ENV=production node backend/api/server.js
