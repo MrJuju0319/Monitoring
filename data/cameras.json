@@ -1,0 +1,23 @@
+[
+  {
+    "id": "cam-1",
+    "name": "Porte principale",
+    "zone": "Accueil",
+    "status": "online",
+    "streamUrl": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+  },
+  {
+    "id": "cam-2",
+    "name": "Couloir Nord",
+    "zone": "Couloir",
+    "status": "online",
+    "streamUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+  },
+  {
+    "id": "cam-3",
+    "name": "Stockage",
+    "zone": "Stockage",
+    "status": "offline",
+    "streamUrl": ""
+  }
+]

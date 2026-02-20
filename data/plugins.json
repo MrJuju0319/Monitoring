@@ -1,0 +1,42 @@
+[
+  {
+    "id": "presence-sensors",
+    "name": "Capteurs de présence",
+    "description": "Détection de mouvement sur les zones critiques",
+    "enabled": true,
+    "config": {
+      "pollIntervalMs": 1500,
+      "alertThresholdSec": 45
+    }
+  },
+  {
+    "id": "door-contacts",
+    "name": "Contacts portes",
+    "description": "Suivi ouverture/fermeture des accès",
+    "enabled": true,
+    "config": {
+      "pollIntervalMs": 1000,
+      "notifyOnOpenSec": 120
+    }
+  },
+  {
+    "id": "weather-feed",
+    "name": "Météo",
+    "description": "Intégration météo pour contexte environnemental",
+    "enabled": false,
+    "config": {
+      "location": "Bruxelles",
+      "refreshSec": 600
+    }
+  },
+  {
+    "id": "camera-streams",
+    "name": "Flux caméras",
+    "description": "Gestion des flux vidéo des caméras",
+    "enabled": true,
+    "config": {
+      "layout": "grid",
+      "maxVisible": 4
+    }
+  }
+]
