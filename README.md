@@ -89,19 +89,3 @@ Ce script :
 
 - vérifie la présence de `config/config.prod.yaml`,
 - prépare le lancement backend/frontend en mode production (points de branchement `TODO` inclus).
-
-## Convention plugins Minecraft
-
-Pour tout plugin Minecraft ajouté dans ce dépôt :
-
-- cible obligatoire : **PaperMC 1.21.8**,
-- JDK obligatoire : **Java 21**,
-- pour les plugins backend Paper : utiliser **`paper-plugins.yml`** uniquement pour les serveurs backend (conformément à la contrainte projet),
-- maintenir ce README à jour à chaque évolution plugin avec :
-  - fonctionnalités,
-  - commandes,
-  - permissions,
-  - placeholders PlaceholderAPI,
-  - configuration et compatibilité.
-
-Référence : https://docs.papermc.io/paper/dev/getting-started/paper-plugins/
