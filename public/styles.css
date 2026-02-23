@@ -94,3 +94,23 @@ button.save { margin-top:.45rem; background:var(--primary); color:white; border:
 
 .warning-text { color:#ffd07d; font-size:.85rem; line-height:1.35; }
 .plugin-item h4 { margin:0 0 .4rem; }
+
+
+.rtsp-player-wrap {
+  width: 100%;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: .45rem;
+}
+
+.rtsp-canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  background: #000;
+}
+
+.camera-tile {
+  min-height: 220px;
+}

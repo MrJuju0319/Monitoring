@@ -55,5 +55,19 @@
       "qos": 0,
       "retain": false
     }
+  },
+  {
+    "id": "rtsp-relay",
+    "name": "RTSP Relay",
+    "description": "Relais RTSP vers WebSocket MPEG-TS pour affichage navigateur (JSMpeg)",
+    "enabled": true,
+    "config": {
+      "ffmpegPath": "ffmpeg",
+      "transport": "tcp",
+      "width": 960,
+      "height": 540,
+      "fps": 15,
+      "bitrateKbps": 1200
+    }
   }
 ]

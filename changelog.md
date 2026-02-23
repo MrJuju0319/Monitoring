@@ -1,8 +1,9 @@
 # Changelog
 
-## [0.5.1] - 2026-02-20
+## [0.6.0] - 2026-02-20
 
 ### Added
+- Module `rtsp-relay` pour afficher les flux RTSP directement sur la page web (ffmpeg + JSMpeg via WebSocket).
 - Configuration complète depuis la page web pour les plugins, les plans et les caméras.
 - Rafraîchissement manuel des données de Configuration via bouton dédié (suppression de l’auto-refresh).
 - Création de plans depuis l’interface web avec ajout d’image de plan.
@@ -17,6 +18,7 @@
 
 ### Changed
 - Affichage caméras: message RTSP clarifié (nécessité HLS/WebRTC pour le navigateur).
+- Taille des tuiles vidéo gérée dynamiquement selon le nombre de caméras.
 - Upload image plan: remplacement du base64 par enregistrement fichier JPG dans `/public/uploads`.
 - Support de l’image de fond des plans dans la page Plans.
 - README enrichi avec exemples de configuration RTSP/ONVIF et recommandations HLS.

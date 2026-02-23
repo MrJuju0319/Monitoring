@@ -39,6 +39,7 @@ const savePlanButton = document.getElementById('save-plan-btn');
 const configRefreshBtn = document.getElementById('config-refresh-btn');
 
 let activeDragZoneId = null;
+const rtspPlayers = new Map();
 
 function isAdmin() {
   return state.currentUser?.role === 'admin';
@@ -139,26 +140,76 @@ function renderPlans() {
 
 function cameraPlaybackHtml(camera) {
   const src = camera.hlsUrl || camera.streamUrl || '';
-  const isRtsp = src.toLowerCase().startsWith('rtsp://');
+  const isRtsp = (camera.streamUrl || '').toLowerCase().startsWith('rtsp://');
 
   if (!src) return '<p>Flux indisponible</p>';
+
+  if (isRtsp && camera.hlsUrl) {
+    return `<video src="${camera.hlsUrl}" controls muted></video><p class="warning-text">Source RTSP + fallback HLS utilisé pour lecture web.</p>`;
+  }
+
   if (isRtsp) {
-    return `<p class="warning-text">RTSP détecté: un navigateur ne peut pas lire <code>rtsp://</code> directement. Configure <strong>hlsUrl</strong> (ou WebRTC via passerelle) dans l’onglet Caméras.</p>`;
+    return `
+      <div class="rtsp-player-wrap">
+        <canvas id="rtsp-canvas-${camera.id}" class="rtsp-canvas"></canvas>
+      </div>
+      <p class="warning-text">RTSP relay actif: affichage via module intégré (JSMpeg + ffmpeg).</p>
+    `;
   }
 
   return `<video src="${src}" controls muted></video>`;
 }
 
+function destroyUnusedRtspPlayers(cameraIds) {
+  for (const [id, player] of rtspPlayers.entries()) {
+    if (!cameraIds.includes(id)) {
+      try { player.destroy(); } catch {}
+      rtspPlayers.delete(id);
+    }
+  }
+}
+
+function setupRtspPlayers() {
+  if (!window.JSMpeg) return;
+
+  const rtspCameras = state.cameras.filter((camera) => (camera.streamUrl || '').toLowerCase().startsWith('rtsp://') && !camera.hlsUrl);
+  const ids = rtspCameras.map((c) => c.id);
+  destroyUnusedRtspPlayers(ids);
+
+  for (const camera of rtspCameras) {
+    if (rtspPlayers.has(camera.id)) continue;
+    const canvas = document.getElementById(`rtsp-canvas-${camera.id}`);
+    if (!canvas) continue;
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsPath = camera.playback?.wsUrl || `/rtsp/${camera.id}?token=${encodeURIComponent(state.token)}`;
+    const url = `${wsProtocol}://${window.location.host}${wsPath.startsWith('/') ? wsPath : `/${wsPath}`}`;
+
+    try {
+      const player = new window.JSMpeg.Player(url, { canvas, autoplay: true, audio: false, loop: true });
+      rtspPlayers.set(camera.id, player);
+    } catch {
+      logEvent(`Impossible d'initialiser le flux RTSP pour ${camera.name}`);
+    }
+  }
+}
+
 function renderCameras() {
+  const count = Math.max(1, state.cameras.length);
+  const minWidth = count <= 1 ? 680 : count === 2 ? 420 : count <= 4 ? 320 : 260;
+  cameraGrid.style.gridTemplateColumns = `repeat(auto-fit, minmax(${minWidth}px, 1fr))`;
+
   cameraGrid.innerHTML = state.cameras
     .map((camera) => {
-      return `<article class="camera-tile">
+      return `<article class="camera-tile camera-count-${count}">
         <strong>${camera.name}</strong>
         <div><span class="badge ${camera.status === 'online' ? 'ok' : 'critical'}">${camera.status}</span> · ${camera.zone}</div>
         ${cameraPlaybackHtml(camera)}
       </article>`;
     })
     .join('');
+
+  setupRtspPlayers();
 }
 
 function renderEquipment() {

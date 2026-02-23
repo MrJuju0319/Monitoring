@@ -6,6 +6,7 @@ import sharp from 'sharp';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,6 +32,99 @@ const mqttState = {
   client: null,
   currentConfigSignature: null
 };
+
+
+const rtspRelayState = new Map();
+
+function getCameraRelay(cameraId) {
+  if (!rtspRelayState.has(cameraId)) {
+    rtspRelayState.set(cameraId, {
+      ffmpeg: null,
+      clients: new Set(),
+      startedAt: 0,
+      status: 'idle',
+      lastError: null
+    });
+  }
+  return rtspRelayState.get(cameraId);
+}
+
+async function getRtspRelayConfig() {
+  const plugins = await readJson(pluginsFile);
+  const plugin = plugins.find((item) => item.id === 'rtsp-relay');
+  const defaults = {
+    enabled: true,
+    ffmpegPath: 'ffmpeg',
+    width: 960,
+    height: 540,
+    fps: 15,
+    bitrateKbps: 1200,
+    transport: 'tcp'
+  };
+
+  if (!plugin) return defaults;
+  return { ...defaults, ...(plugin.config || {}), enabled: plugin.enabled !== false };
+}
+
+async function startRtspRelay(cameraId, rtspUrl) {
+  const relay = getCameraRelay(cameraId);
+  if (relay.ffmpeg) return relay;
+
+  const cfg = await getRtspRelayConfig();
+  if (!cfg.enabled) {
+    relay.status = 'disabled';
+    relay.lastError = 'Plugin rtsp-relay désactivé';
+    return relay;
+  }
+
+  const ffmpegArgs = [
+    '-rtsp_transport', cfg.transport || 'tcp',
+    '-i', rtspUrl,
+    '-an',
+    '-vf', `scale=${cfg.width || 960}:${cfg.height || 540}`,
+    '-r', String(cfg.fps || 15),
+    '-b:v', `${cfg.bitrateKbps || 1200}k`,
+    '-f', 'mpegts',
+    '-codec:v', 'mpeg1video',
+    '-'
+  ];
+
+  relay.ffmpeg = spawn(cfg.ffmpegPath || 'ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+  relay.startedAt = Date.now();
+  relay.status = 'starting';
+  relay.lastError = null;
+
+  relay.ffmpeg.stdout.on('data', (chunk) => {
+    relay.status = 'streaming';
+    for (const client of relay.clients) {
+      if (client.readyState === 1) client.send(chunk);
+    }
+  });
+
+  relay.ffmpeg.stderr.on('data', (chunk) => {
+    const msg = chunk.toString();
+    if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) {
+      relay.lastError = msg.slice(0, 500);
+    }
+  });
+
+  relay.ffmpeg.on('close', (code) => {
+    relay.status = 'stopped';
+    if (code !== 0 && !relay.lastError) relay.lastError = `ffmpeg fermé avec code ${code}`;
+    relay.ffmpeg = null;
+  });
+
+  return relay;
+}
+
+function stopRtspRelayIfUnused(cameraId) {
+  const relay = getCameraRelay(cameraId);
+  if (relay.clients.size === 0 && relay.ffmpeg) {
+    relay.ffmpeg.kill('SIGTERM');
+    relay.ffmpeg = null;
+    relay.status = 'idle';
+  }
+}
 
 app.use(express.json({ limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -141,8 +235,9 @@ function detectCameraPlayback(camera) {
   if (lower.startsWith('rtsp://')) {
     return {
       canPlayDirectly: false,
-      reason: 'RTSP n’est pas lisible directement par les navigateurs. Utilisez un flux HLS/WebRTC en passerelle.',
-      recommendedUrl: camera.hlsUrl || ''
+      reason: 'RTSP n’est pas lisible directement par les navigateurs. Utilisez hlsUrl/WebRTC ou le module rtsp-relay intégré.',
+      recommendedUrl: camera.hlsUrl || '',
+      mode: 'rtsp-relay'
     };
   }
 
@@ -396,9 +491,17 @@ app.post('/api/plans/:id/zones/positions', authRequired, adminOnly, async (req, 
   return res.json(plan);
 });
 
-app.get('/api/cameras', authRequired, async (_, res) => {
+app.get('/api/cameras', authRequired, async (req, res) => {
   const cameras = await readJson(camerasFile);
-  res.json(cameras);
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
+  const withPlayback = cameras.map((camera) => {
+    const playback = detectCameraPlayback(camera);
+    if ((camera.streamUrl || '').toLowerCase().startsWith('rtsp://')) {
+      playback.wsUrl = `/rtsp/${camera.id}?token=${encodeURIComponent(token)}`;
+    }
+    return { ...camera, playback };
+  });
+  res.json(withPlayback);
 });
 
 app.post('/api/cameras', authRequired, adminOnly, async (req, res) => {
@@ -434,7 +537,15 @@ app.get('/api/cameras/:id/playback', authRequired, async (req, res) => {
   const cameras = await readJson(camerasFile);
   const camera = cameras.find((item) => item.id === req.params.id);
   if (!camera) return res.status(404).json({ error: 'Caméra introuvable' });
-  res.json(detectCameraPlayback(camera));
+  const playback = detectCameraPlayback(camera);
+  if ((camera.streamUrl || '').toLowerCase().startsWith('rtsp://')) {
+    const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
+    playback.wsUrl = `/rtsp/${camera.id}?token=${encodeURIComponent(token)}`;
+    const relay = getCameraRelay(camera.id);
+    playback.relayStatus = relay.status;
+    playback.relayError = relay.lastError;
+  }
+  res.json(playback);
 });
 
 app.get('/api/history', authRequired, (req, res) => {
@@ -519,6 +630,46 @@ wss.on('connection', async (ws, req) => {
 
   const [plugins, plans, cameras] = await Promise.all([readJson(pluginsFile), readJson(plansFile), readJson(camerasFile)]);
   ws.send(JSON.stringify({ type: 'snapshot', timestamp: Date.now(), payload: { plugins, plans, cameras } }));
+});
+
+
+const rtspWss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', async (request, socket, head) => {
+  const url = new URL(request.url || '/', `http://${request.headers.host}`);
+  if (!url.pathname.startsWith('/rtsp/')) return;
+
+  const token = url.searchParams.get('token');
+  const payload = verifyToken(token);
+  if (!payload) {
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  rtspWss.handleUpgrade(request, socket, head, (ws) => {
+    rtspWss.emit('connection', ws, request, payload);
+  });
+});
+
+rtspWss.on('connection', async (ws, request) => {
+  const url = new URL(request.url || '/', `http://${request.headers.host}`);
+  const cameraId = url.pathname.split('/').pop();
+  const cameras = await readJson(camerasFile);
+  const camera = cameras.find((item) => item.id === cameraId);
+
+  if (!camera || !camera.streamUrl || !camera.streamUrl.toLowerCase().startsWith('rtsp://')) {
+    ws.close(1008, 'RTSP stream introuvable');
+    return;
+  }
+
+  const relay = await startRtspRelay(cameraId, camera.streamUrl);
+  relay.clients.add(ws);
+
+  ws.on('close', () => {
+    relay.clients.delete(ws);
+    stopRtspRelayIfUnused(cameraId);
+  });
 });
 
 setInterval(async () => {

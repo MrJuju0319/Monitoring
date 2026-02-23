@@ -37,6 +37,7 @@ Exemple valide pour stockage de configuration caméra :
 
 - `streamUrl` peut contenir RTSP (référence source).
 - `hlsUrl` doit être renseigné pour lecture web (HLS/WebRTC via passerelle).
+- Si `hlsUrl` est vide, le module **rtsp-relay** (ffmpeg + JSMpeg) peut afficher un flux RTSP directement dans la page web via WebSocket MPEG-TS.
 - Les images de plan uploadées via UI sont converties et enregistrées en **JPG** (fichiers `/public/uploads`), pas en base64.
 - `onvif` sert à stocker les informations ONVIF de l’équipement.
 
@@ -61,6 +62,7 @@ Exemple valide pour stockage de configuration caméra :
 
 ### Plugins
 - `GET /api/plugins`
+- Plugin `RTSP Relay` configurable dans la page Configuration (ffmpegPath, résolution, FPS, bitrate).
 - `PATCH /api/plugins/:id/enabled` (**admin**)
 - `PUT /api/plugins/:id/config` (**admin**)
 - `POST /api/plugins/mqtt-io/publish` (**admin**)
@@ -88,3 +90,10 @@ Exemple valide pour stockage de configuration caméra :
 Conformément à la demande projet:
 - **README.md doit être mis à jour à chaque ajout**.
 - **changelog.md doit être mis à jour à chaque modification**.
+
+
+## Prérequis RTSP relay
+
+- `ffmpeg` doit être installé sur le serveur.
+- Le plugin `rtsp-relay` doit être activé.
+- Le flux caméra utilise `streamUrl` en `rtsp://...` (ou `hlsUrl` si disponible pour fallback).
