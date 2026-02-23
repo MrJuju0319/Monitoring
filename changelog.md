@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3] - 2026-02-23
+
+### Changed
+- Normalisation automatique des URL RTSP en entrée caméra (correction des formats invalides type `/:554`).
+- Le convertisseur local RTSP->HLS utilise désormais systématiquement l’URL RTSP normalisée avant lancement ffmpeg.
+- Documentation clarifiée sur la prise en charge web: conversion locale RTSP vers flux HTTP HLS pour affichage navigateur.
+
 ## [0.6.2] - 2026-02-23
 
 ### Added

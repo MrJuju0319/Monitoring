@@ -146,11 +146,23 @@ function getRtspWeb(cameraId) {
   return rtspWebState.get(cameraId);
 }
 
+function normalizeRtspUrl(rawUrl) {
+  if (typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed.toLowerCase().startsWith('rtsp://')) return trimmed;
+
+  let normalized = trimmed;
+  normalized = normalized.replace(/\/:([0-9]{2,5})(?=\/|$|\?)/, ':$1');
+  normalized = normalized.replace(/^rtsp:\/\//i, 'rtsp://');
+  return normalized;
+}
+
 async function ensureLiveDir() {
   await fs.mkdir(liveDir, { recursive: true });
 }
 
 async function startRtspWebConverter(cameraId, rtspUrl) {
+  const normalizedRtsp = normalizeRtspUrl(rtspUrl);
   const relay = getRtspWeb(cameraId);
   relay.lastAccess = Date.now();
   if (relay.ffmpeg) return relay;
@@ -171,7 +183,7 @@ async function startRtspWebConverter(cameraId, rtspUrl) {
     '-fflags', 'nobuffer',
     '-flags', 'low_delay',
     '-rtsp_transport', cfg.transport || 'tcp',
-    '-i', rtspUrl,
+    '-i', normalizedRtsp,
     '-an',
     '-preset', 'ultrafast',
     '-tune', 'zerolatency',
@@ -232,7 +244,9 @@ function stopRtspWebConverter(cameraId) {
 
 async function syncRtspWebConverters() {
   const cameras = await readJson(camerasFile);
-  const rtspCameras = cameras.filter((camera) => (camera.streamUrl || '').toLowerCase().startsWith('rtsp://'));
+  const rtspCameras = cameras
+    .map((camera) => ({ ...camera, streamUrl: normalizeRtspUrl(camera.streamUrl || '') }))
+    .filter((camera) => (camera.streamUrl || '').toLowerCase().startsWith('rtsp://'));
   const ids = new Set(rtspCameras.map((camera) => camera.id));
 
   for (const camera of rtspCameras) {
@@ -766,7 +780,7 @@ app.post('/api/cameras', authRequired, adminOnly, async (req, res) => {
   if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name requis' });
 
   const cameras = await readJson(camerasFile);
-  const camera = { id: randomId('cam'), name, zone, status, streamUrl, hlsUrl, onvif };
+  const camera = { id: randomId('cam'), name, zone, status, streamUrl: normalizeRtspUrl(streamUrl), hlsUrl, onvif };
   cameras.push(camera);
   await writeJson(camerasFile, cameras);
   await syncRtspWebConverters();
@@ -782,7 +796,7 @@ app.put('/api/cameras/:id', authRequired, adminOnly, async (req, res) => {
   const { name, zone, streamUrl, hlsUrl, status, onvif } = req.body;
   if (typeof name === 'string') camera.name = name;
   if (typeof zone === 'string') camera.zone = zone;
-  if (typeof streamUrl === 'string') camera.streamUrl = streamUrl;
+  if (typeof streamUrl === 'string') camera.streamUrl = normalizeRtspUrl(streamUrl);
   if (typeof hlsUrl === 'string') camera.hlsUrl = hlsUrl;
   if (typeof status === 'string') camera.status = status;
   if (onvif && typeof onvif === 'object') camera.onvif = { ...(camera.onvif || {}), ...onvif };

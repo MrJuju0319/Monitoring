@@ -18,7 +18,7 @@ Interface de supervision web moderne pour piloter et visualiser des modules/plug
 
 ## RTSP / ONVIF (important)
 
-Les navigateurs web ne lisent pas directement les URLs `rtsp://`.
+Les navigateurs web ne lisent pas directement les URLs `rtsp://` (**RTSP natif navigateur non supporté**).
 
 Exemple valide pour stockage de configuration caméra :
 
@@ -39,6 +39,7 @@ Exemple valide pour stockage de configuration caméra :
 - `hlsUrl` doit être renseigné pour lecture web (HLS/WebRTC via passerelle).
 - Si `hlsUrl` est vide, un **convertisseur RTSP -> flux web live (HLS)** est démarré automatiquement (`/live/<cameraId>/index.m3u8`) pour l’affichage navigateur.
 - Le convertisseur RTSP est lancé dès le démarrage du serveur pour toutes les caméras RTSP configurées (pré-chauffage), afin d’avoir un flux live prêt en continu.
+- Le backend applique une normalisation automatique des URLs RTSP mal formatées (ex: `rtsp://ip/:554/...` devient `rtsp://ip:554/...`).
 - Le mode WebSocket JSMpeg reste disponible en fallback technique.
 - Les images de plan uploadées via UI sont converties et enregistrées en **JPG** (fichiers `/public/uploads`), pas en base64.
 - `onvif` sert à stocker les informations ONVIF de l’équipement.
@@ -120,4 +121,5 @@ Conformément à la demande projet:
 - `ffmpeg` doit être installé sur le serveur.
 - Le plugin `rtsp-relay` doit être activé.
 - Le frontend charge `hls.js` pour lire le flux web live HLS généré automatiquement.
+- La retransmission est fournie en **HTTP HLS local** via `/live/<cameraId>/index.m3u8`.
 - Le flux caméra utilise `streamUrl` en `rtsp://...` (ou `hlsUrl` si disponible pour fallback).
