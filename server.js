@@ -29,7 +29,7 @@ const mqttState = {
   currentConfigSignature: null
 };
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 async function readJson(file) {
@@ -39,6 +39,10 @@ async function readJson(file) {
 
 async function writeJson(file, data) {
   await fs.writeFile(file, JSON.stringify(data, null, 2));
+}
+
+function randomId(prefix) {
+  return `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 }
 
 function getPluginSummary(plugins) {
@@ -75,10 +79,7 @@ function authRequired(req, res, next) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   const payload = verifyToken(token);
 
-  if (!payload) {
-    return res.status(401).json({ error: 'Authentification requise' });
-  }
-
+  if (!payload) return res.status(401).json({ error: 'Authentification requise' });
   req.user = payload;
   return next();
 }
@@ -105,6 +106,24 @@ function parseMqttValue(rawValue, dataType) {
   }
 
   return { raw: valueText, value: valueText, type: 'text' };
+}
+
+function detectCameraPlayback(camera) {
+  const source = camera.hlsUrl || camera.streamUrl || '';
+  if (!source) {
+    return { canPlayDirectly: false, reason: 'Aucune URL de flux configurée', recommendedUrl: '' };
+  }
+
+  const lower = source.toLowerCase();
+  if (lower.startsWith('rtsp://')) {
+    return {
+      canPlayDirectly: false,
+      reason: 'RTSP n’est pas lisible directement par les navigateurs. Utilisez un flux HLS/WebRTC en passerelle.',
+      recommendedUrl: camera.hlsUrl || ''
+    };
+  }
+
+  return { canPlayDirectly: true, reason: '', recommendedUrl: source };
 }
 
 async function getMqttPlugin() {
@@ -136,7 +155,6 @@ async function setupMqttClientIfNeeded() {
   });
 
   if (mqttState.client && mqttState.currentConfigSignature === signature) return;
-
   if (mqttState.client) mqttState.client.end(true);
 
   const client = mqtt.connect(cfg.brokerUrl, {
@@ -228,9 +246,7 @@ app.get('/api/plugins', authRequired, async (_, res) => {
 app.patch('/api/plugins/:id/enabled', authRequired, adminOnly, async (req, res) => {
   const { id } = req.params;
   const { enabled } = req.body;
-  if (typeof enabled !== 'boolean') {
-    return res.status(400).json({ error: 'enabled doit être un booléen' });
-  }
+  if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled doit être un booléen' });
 
   const plugins = await readJson(pluginsFile);
   const plugin = plugins.find((item) => item.id === id);
@@ -245,7 +261,6 @@ app.patch('/api/plugins/:id/enabled', authRequired, adminOnly, async (req, res) 
 app.put('/api/plugins/:id/config', authRequired, adminOnly, async (req, res) => {
   const { id } = req.params;
   const incomingConfig = req.body;
-
   if (!incomingConfig || typeof incomingConfig !== 'object' || Array.isArray(incomingConfig)) {
     return res.status(400).json({ error: 'config invalide' });
   }
@@ -287,6 +302,37 @@ app.get('/api/plans', authRequired, async (_, res) => {
   res.json(plans);
 });
 
+app.post('/api/plans', authRequired, adminOnly, async (req, res) => {
+  const { name, backgroundImage = '', zones = [] } = req.body;
+  if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name requis' });
+
+  const plans = await readJson(plansFile);
+  const plan = {
+    id: randomId('plan'),
+    name,
+    backgroundImage,
+    zones: Array.isArray(zones) ? zones : []
+  };
+
+  plans.push(plan);
+  await writeJson(plansFile, plans);
+  res.status(201).json(plan);
+});
+
+app.put('/api/plans/:id', authRequired, adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const { name, backgroundImage } = req.body;
+  const plans = await readJson(plansFile);
+  const plan = plans.find((item) => item.id === id);
+  if (!plan) return res.status(404).json({ error: 'Plan introuvable' });
+
+  if (typeof name === 'string' && name.trim()) plan.name = name.trim();
+  if (typeof backgroundImage === 'string') plan.backgroundImage = backgroundImage;
+
+  await writeJson(plansFile, plans);
+  res.json(plan);
+});
+
 app.post('/api/plans/:id/zones/positions', authRequired, adminOnly, async (req, res) => {
   const { id } = req.params;
   const { zones } = req.body;
@@ -300,6 +346,7 @@ app.post('/api/plans/:id/zones/positions', authRequired, adminOnly, async (req, 
     if (!zoneUpdate.id || typeof zoneUpdate.x !== 'number' || typeof zoneUpdate.y !== 'number') {
       return res.status(400).json({ error: 'zone invalide: id, x, y requis' });
     }
+
     const zone = plan.zones.find((item) => item.id === zoneUpdate.id);
     if (!zone) continue;
     zone.x = Math.max(2, Math.min(98, zoneUpdate.x));
@@ -313,6 +360,42 @@ app.post('/api/plans/:id/zones/positions', authRequired, adminOnly, async (req, 
 app.get('/api/cameras', authRequired, async (_, res) => {
   const cameras = await readJson(camerasFile);
   res.json(cameras);
+});
+
+app.post('/api/cameras', authRequired, adminOnly, async (req, res) => {
+  const { name, zone = '', streamUrl = '', hlsUrl = '', status = 'offline', onvif = {} } = req.body;
+  if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name requis' });
+
+  const cameras = await readJson(camerasFile);
+  const camera = { id: randomId('cam'), name, zone, status, streamUrl, hlsUrl, onvif };
+  cameras.push(camera);
+  await writeJson(camerasFile, cameras);
+  res.status(201).json(camera);
+});
+
+app.put('/api/cameras/:id', authRequired, adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const cameras = await readJson(camerasFile);
+  const camera = cameras.find((item) => item.id === id);
+  if (!camera) return res.status(404).json({ error: 'Caméra introuvable' });
+
+  const { name, zone, streamUrl, hlsUrl, status, onvif } = req.body;
+  if (typeof name === 'string') camera.name = name;
+  if (typeof zone === 'string') camera.zone = zone;
+  if (typeof streamUrl === 'string') camera.streamUrl = streamUrl;
+  if (typeof hlsUrl === 'string') camera.hlsUrl = hlsUrl;
+  if (typeof status === 'string') camera.status = status;
+  if (onvif && typeof onvif === 'object') camera.onvif = { ...(camera.onvif || {}), ...onvif };
+
+  await writeJson(camerasFile, cameras);
+  res.json(camera);
+});
+
+app.get('/api/cameras/:id/playback', authRequired, async (req, res) => {
+  const cameras = await readJson(camerasFile);
+  const camera = cameras.find((item) => item.id === req.params.id);
+  if (!camera) return res.status(404).json({ error: 'Caméra introuvable' });
+  res.json(detectCameraPlayback(camera));
 });
 
 app.get('/api/history', authRequired, (req, res) => {
@@ -389,7 +472,6 @@ wss.on('connection', async (ws, req) => {
   const reqUrl = new URL(req.url || '/ws', `http://${req.headers.host}`);
   const token = reqUrl.searchParams.get('token');
   const payload = verifyToken(token);
-
   if (!payload) {
     ws.close(1008, 'Unauthorized');
     return;
@@ -409,7 +491,6 @@ setInterval(async () => {
       if (random > 0.93) zone.state = 'critical';
       else if (random > 0.78) zone.state = 'warning';
       else zone.state = 'ok';
-
       if (zone.state !== previousState) pushSensorHistory(plan.id, zone.id, zone.state);
     }
   }

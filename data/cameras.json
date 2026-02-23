@@ -4,20 +4,38 @@
     "name": "Porte principale",
     "zone": "Accueil",
     "status": "online",
-    "streamUrl": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+    "streamUrl": "rtsp://admin:Rjs.012015@192.168.1.167:554/cam/realmonitor?channel=1&subtype=0",
+    "hlsUrl": "",
+    "onvif": {
+      "deviceServiceUrl": "http://192.168.1.167:80/onvif/device_service",
+      "username": "admin",
+      "password": "Rjs.012015"
+    }
   },
   {
     "id": "cam-2",
     "name": "Couloir Nord",
     "zone": "Couloir",
     "status": "online",
-    "streamUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+    "streamUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    "hlsUrl": "",
+    "onvif": {
+      "deviceServiceUrl": "",
+      "username": "",
+      "password": ""
+    }
   },
   {
     "id": "cam-3",
     "name": "Stockage",
     "zone": "Stockage",
     "status": "offline",
-    "streamUrl": ""
+    "streamUrl": "",
+    "hlsUrl": "",
+    "onvif": {
+      "deviceServiceUrl": "",
+      "username": "",
+      "password": ""
+    }
   }
 ]

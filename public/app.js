@@ -24,7 +24,9 @@ const summaryCards = document.getElementById('summary-cards');
 const planTabs = document.getElementById('plan-tabs');
 const planCanvas = document.getElementById('plan-canvas');
 const cameraGrid = document.getElementById('camera-grid');
-const configModules = document.getElementById('config-modules');
+const configPlugins = document.getElementById('config-plugins');
+const configPlans = document.getElementById('config-plans');
+const configCameras = document.getElementById('config-cameras');
 const connectionBadge = document.getElementById('connection-status');
 const pageTitle = document.getElementById('page-title');
 const historyRange = document.getElementById('history-range');
@@ -125,16 +127,35 @@ function renderPlans() {
     planCanvas.innerHTML = '<p>Aucun plan chargé.</p>';
     return;
   }
+
   state.activePlanId = activePlan.id;
+  planCanvas.style.backgroundImage = activePlan.backgroundImage ? `url(${activePlan.backgroundImage})` : '';
+  planCanvas.style.backgroundSize = 'cover';
+  planCanvas.style.backgroundPosition = 'center';
   planCanvas.innerHTML = activePlan.zones.map(zoneBadge).join('');
   planCanvas.classList.toggle('editing', state.editingMode && isAdmin());
+}
+
+function cameraPlaybackHtml(camera) {
+  const src = camera.hlsUrl || camera.streamUrl || '';
+  const isRtsp = src.toLowerCase().startsWith('rtsp://');
+
+  if (!src) return '<p>Flux indisponible</p>';
+  if (isRtsp) {
+    return `<p class="warning-text">RTSP détecté: non lisible directement dans le navigateur.<br/>Ajoute une URL HLS/WebRTC dans <strong>hlsUrl</strong> pour l’affichage web.</p>`;
+  }
+
+  return `<video src="${src}" controls muted></video>`;
 }
 
 function renderCameras() {
   cameraGrid.innerHTML = state.cameras
     .map((camera) => {
-      const media = camera.status === 'online' && camera.streamUrl ? `<video src="${camera.streamUrl}" controls muted></video>` : '<p>Flux indisponible</p>';
-      return `<article class="camera-tile"><strong>${camera.name}</strong><div><span class="badge ${camera.status === 'online' ? 'ok' : 'critical'}">${camera.status}</span> · ${camera.zone}</div>${media}</article>`;
+      return `<article class="camera-tile">
+        <strong>${camera.name}</strong>
+        <div><span class="badge ${camera.status === 'online' ? 'ok' : 'critical'}">${camera.status}</span> · ${camera.zone}</div>
+        ${cameraPlaybackHtml(camera)}
+      </article>`;
     })
     .join('');
 }
@@ -186,7 +207,11 @@ async function togglePlugin(id, enabled) {
 async function savePluginConfig(id, text) {
   if (!isAdmin()) return;
   let parsed;
-  try { parsed = JSON.parse(text); } catch { return alert('JSON invalide'); }
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return alert('JSON invalide');
+  }
 
   const response = await apiFetch(`/api/plugins/${id}/config`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsed)
@@ -214,11 +239,61 @@ async function savePlanZonesPositions() {
   if (!activePlan) return;
 
   const response = await apiFetch(`/api/plans/${activePlan.id}/zones/positions`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ zones: activePlan.zones.map((zone) => ({ id: zone.id, x: zone.x, y: zone.y })) })
   });
   if (!response.ok) return logEvent('Échec sauvegarde positions capteurs');
   logEvent(`Positions capteurs sauvegardées pour ${activePlan.name}`);
+  await loadData();
+}
+
+async function createPlanFromForm(name, imageDataUrl) {
+  if (!isAdmin()) return;
+  const response = await apiFetch('/api/plans', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, backgroundImage: imageDataUrl, zones: [] })
+  });
+
+  if (!response.ok) return logEvent('Erreur création plan');
+  logEvent(`Plan "${name}" ajouté`);
+  await loadData();
+}
+
+async function savePlanMeta(planId, name, backgroundImage) {
+  if (!isAdmin()) return;
+  const response = await apiFetch(`/api/plans/${planId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, backgroundImage })
+  });
+  if (!response.ok) return logEvent('Erreur mise à jour plan');
+  logEvent(`Plan ${planId} mis à jour`);
+  await loadData();
+}
+
+async function createCamera(payload) {
+  if (!isAdmin()) return;
+  const response = await apiFetch('/api/cameras', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) return logEvent('Erreur ajout caméra');
+  logEvent(`Caméra "${payload.name}" ajoutée`);
+  await loadData();
+}
+
+async function updateCamera(id, payload) {
+  if (!isAdmin()) return;
+  const response = await apiFetch(`/api/cameras/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) return logEvent('Erreur mise à jour caméra');
+  logEvent(`Caméra ${id} mise à jour`);
   await loadData();
 }
 
@@ -245,9 +320,9 @@ function updateZonePositionFromPointer(clientX, clientY) {
   }
 }
 
-function renderConfig() {
+function renderPluginsConfig() {
   const readOnlyNote = isAdmin() ? '' : '<p class="readonly-note">Compte USER : visualisation uniquement (édition désactivée).</p>';
-  configModules.innerHTML = `${readOnlyNote}${state.plugins
+  configPlugins.innerHTML = `${readOnlyNote}${state.plugins
     .map((plugin) => {
       const mqttExtra = plugin.id === 'mqtt-io'
         ? `<div class="mqtt-grid">
@@ -274,6 +349,81 @@ function renderConfig() {
     .join('')}`;
 }
 
+function renderPlansConfig() {
+  configPlans.innerHTML = `
+    <div class="panel">
+      <h3>Ajouter un plan</h3>
+      <label>Nom du plan <input id="new-plan-name" class="plugin-input" placeholder="Ex: Entrepôt" ${isAdmin() ? '' : 'disabled'} /></label>
+      <label>Image du plan <input id="new-plan-image" type="file" accept="image/*" class="plugin-input" ${isAdmin() ? '' : 'disabled'} /></label>
+      <button class="save" data-create-plan ${isAdmin() ? '' : 'disabled'}>Créer le plan</button>
+    </div>
+    <div class="panel">
+      <h3>Plans existants</h3>
+      ${state.plans
+        .map(
+          (plan) => `
+            <article class="plugin-item">
+              <div>
+                <label>Nom <input id="plan-name-${plan.id}" class="plugin-input" value="${plan.name}" ${isAdmin() ? '' : 'disabled'} /></label>
+                <label>Image du plan (optionnel)
+                  <input id="plan-image-${plan.id}" type="file" accept="image/*" class="plugin-input" ${isAdmin() ? '' : 'disabled'} />
+                </label>
+                <button class="save" data-save-plan="${plan.id}" ${isAdmin() ? '' : 'disabled'}>Sauvegarder ce plan</button>
+              </div>
+              <div>${plan.backgroundImage ? '<span class="badge ok">Image configurée</span>' : '<span class="badge warning">Pas d’image</span>'}</div>
+            </article>`
+        )
+        .join('')}
+    </div>`;
+}
+
+function cameraConfigCard(camera) {
+  return `
+  <article class="plugin-item">
+    <div>
+      <h4>${camera.name}</h4>
+      <label>Nom <input id="cam-name-${camera.id}" class="plugin-input" value="${camera.name}" ${isAdmin() ? '' : 'disabled'} /></label>
+      <label>Zone <input id="cam-zone-${camera.id}" class="plugin-input" value="${camera.zone || ''}" ${isAdmin() ? '' : 'disabled'} /></label>
+      <label>Status
+        <select id="cam-status-${camera.id}" class="plugin-input" ${isAdmin() ? '' : 'disabled'}>
+          <option value="online" ${camera.status === 'online' ? 'selected' : ''}>online</option>
+          <option value="offline" ${camera.status === 'offline' ? 'selected' : ''}>offline</option>
+        </select>
+      </label>
+      <label>RTSP/URL source <input id="cam-stream-${camera.id}" class="plugin-input" value="${camera.streamUrl || ''}" ${isAdmin() ? '' : 'disabled'} /></label>
+      <label>HLS/WebRTC URL (pour affichage web) <input id="cam-hls-${camera.id}" class="plugin-input" value="${camera.hlsUrl || ''}" ${isAdmin() ? '' : 'disabled'} /></label>
+      <details>
+        <summary>Config ONVIF</summary>
+        <label>Device service URL <input id="cam-onvif-url-${camera.id}" class="plugin-input" value="${camera.onvif?.deviceServiceUrl || ''}" ${isAdmin() ? '' : 'disabled'} /></label>
+        <label>ONVIF User <input id="cam-onvif-user-${camera.id}" class="plugin-input" value="${camera.onvif?.username || ''}" ${isAdmin() ? '' : 'disabled'} /></label>
+        <label>ONVIF Password <input id="cam-onvif-pass-${camera.id}" class="plugin-input" value="${camera.onvif?.password || ''}" ${isAdmin() ? '' : 'disabled'} /></label>
+      </details>
+      <button class="save" data-save-camera="${camera.id}" ${isAdmin() ? '' : 'disabled'}>Sauvegarder caméra</button>
+    </div>
+    <div>${camera.streamUrl?.startsWith('rtsp://') ? '<span class="badge warning">RTSP direct non lisible web</span>' : '<span class="badge ok">Web playable</span>'}</div>
+  </article>`;
+}
+
+function renderCamerasConfig() {
+  configCameras.innerHTML = `
+    <div class="panel">
+      <h3>Ajouter une caméra</h3>
+      <label>Nom <input id="new-cam-name" class="plugin-input" placeholder="Ex: Cam quai" ${isAdmin() ? '' : 'disabled'} /></label>
+      <label>Zone <input id="new-cam-zone" class="plugin-input" placeholder="Ex: Quai" ${isAdmin() ? '' : 'disabled'} /></label>
+      <label>RTSP/URL source <input id="new-cam-stream" class="plugin-input" placeholder="rtsp://..." ${isAdmin() ? '' : 'disabled'} /></label>
+      <label>HLS URL (si RTSP utilisé) <input id="new-cam-hls" class="plugin-input" placeholder="https://...m3u8" ${isAdmin() ? '' : 'disabled'} /></label>
+      <label>ONVIF device service <input id="new-cam-onvif" class="plugin-input" placeholder="http://IP/onvif/device_service" ${isAdmin() ? '' : 'disabled'} /></label>
+      <button class="save" data-create-camera ${isAdmin() ? '' : 'disabled'}>Ajouter caméra</button>
+    </div>
+    <div class="panel"><h3>Caméras existantes</h3>${state.cameras.map(cameraConfigCard).join('')}</div>`;
+}
+
+function renderConfig() {
+  renderPluginsConfig();
+  renderPlansConfig();
+  renderCamerasConfig();
+}
+
 async function loadData() {
   const [plugins, plans, cameras, dashboard, equipment] = await Promise.all([
     apiFetch('/api/plugins').then((r) => r.json()),
@@ -288,6 +438,7 @@ async function loadData() {
   state.cameras = cameras;
   state.dashboard = dashboard;
   state.equipment = equipment;
+
   if (!state.activePlanId && plans.length) state.activePlanId = plans[0].id;
 
   renderDashboard();
@@ -295,6 +446,18 @@ async function loadData() {
   renderCameras();
   renderEquipment();
   renderConfig();
+}
+
+function fileToDataUrl(input) {
+  const file = input.files?.[0];
+  if (!file) return Promise.resolve('');
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Lecture image impossible'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function initNavigation() {
@@ -338,7 +501,7 @@ function initNavigation() {
     activeDragZoneId = null;
   });
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     const planButton = event.target.closest('[data-plan-id]');
     if (planButton) {
       state.activePlanId = planButton.dataset.planId;
@@ -356,6 +519,50 @@ function initNavigation() {
     if (publishButton) {
       const value = document.getElementById('mqtt-publish')?.value ?? '';
       return publishMqttValue(value);
+    }
+
+    const createPlanBtn = event.target.closest('[data-create-plan]');
+    if (createPlanBtn) {
+      const name = document.getElementById('new-plan-name').value.trim();
+      const dataUrl = await fileToDataUrl(document.getElementById('new-plan-image'));
+      return createPlanFromForm(name, dataUrl);
+    }
+
+    const savePlanBtn = event.target.closest('[data-save-plan]');
+    if (savePlanBtn) {
+      const planId = savePlanBtn.dataset.savePlan;
+      const name = document.getElementById(`plan-name-${planId}`).value.trim();
+      const dataUrl = await fileToDataUrl(document.getElementById(`plan-image-${planId}`));
+      return savePlanMeta(planId, name, dataUrl);
+    }
+
+    const createCamBtn = event.target.closest('[data-create-camera]');
+    if (createCamBtn) {
+      return createCamera({
+        name: document.getElementById('new-cam-name').value.trim(),
+        zone: document.getElementById('new-cam-zone').value.trim(),
+        streamUrl: document.getElementById('new-cam-stream').value.trim(),
+        hlsUrl: document.getElementById('new-cam-hls').value.trim(),
+        onvif: { deviceServiceUrl: document.getElementById('new-cam-onvif').value.trim() },
+        status: 'offline'
+      });
+    }
+
+    const saveCamBtn = event.target.closest('[data-save-camera]');
+    if (saveCamBtn) {
+      const camId = saveCamBtn.dataset.saveCamera;
+      return updateCamera(camId, {
+        name: document.getElementById(`cam-name-${camId}`).value,
+        zone: document.getElementById(`cam-zone-${camId}`).value,
+        status: document.getElementById(`cam-status-${camId}`).value,
+        streamUrl: document.getElementById(`cam-stream-${camId}`).value,
+        hlsUrl: document.getElementById(`cam-hls-${camId}`).value,
+        onvif: {
+          deviceServiceUrl: document.getElementById(`cam-onvif-url-${camId}`).value,
+          username: document.getElementById(`cam-onvif-user-${camId}`).value,
+          password: document.getElementById(`cam-onvif-pass-${camId}`).value
+        }
+      });
     }
 
     const configTab = event.target.closest('[data-config-tab]');
@@ -407,7 +614,9 @@ loginForm.addEventListener('submit', async (event) => {
   const password = document.getElementById('password').value;
 
   const response = await fetch('/api/auth/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password })
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
   });
 
   if (!response.ok) {

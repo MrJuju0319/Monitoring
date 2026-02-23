@@ -8,7 +8,7 @@
         "label": "Accueil",
         "x": 24,
         "y": 18,
-        "state": "ok"
+        "state": "warning"
       },
       {
         "id": "zone-b",

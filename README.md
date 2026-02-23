@@ -4,50 +4,51 @@ Interface de supervision web moderne pour piloter et visualiser des modules/plug
 
 ## Nouveautés principales
 
-- **Authentification avec rôles** :
-  - `admin` : peut configurer, éditer les capteurs, publier MQTT.
-  - `user` : lecture seule (visualisation uniquement).
-- **Plugin MQTT I/O** configurable en web :
-  - abonnement à un topic MQTT,
-  - prise en charge de 3 types de données (`binary`, `numeric`, `text`),
-  - option d’**unité** (ex: °C, %, V),
-  - publication de valeurs de commande vers un topic MQTT.
+- Authentification avec rôles (`admin` / `user`).
+- Plugin `MQTT I/O` configurable en web (subscribe/publish + types binary/numeric/text + unité).
+- **Configuration complète depuis la page web** pour :
+  - plugins,
+  - plans (création + image de plan),
+  - caméras (RTSP/HLS/ONVIF).
 
 ## Comptes de démonstration
 
 - Admin: `admin / admin123`
 - User: `user / user123`
 
+## RTSP / ONVIF (important)
+
+Les navigateurs web ne lisent pas directement les URLs `rtsp://`.
+
+Exemple valide pour stockage de configuration caméra :
+
+```json
+{
+  "name": "Porte principale",
+  "streamUrl": "rtsp://admin:password@192.168.1.167:554/cam/realmonitor?channel=1&subtype=0",
+  "hlsUrl": "https://votre-passerelle/stream/cam1/index.m3u8",
+  "onvif": {
+    "deviceServiceUrl": "http://192.168.1.167:80/onvif/device_service",
+    "username": "admin",
+    "password": "password"
+  }
+}
+```
+
+- `streamUrl` peut contenir RTSP (référence source).
+- `hlsUrl` doit être renseigné pour lecture web (HLS/WebRTC via passerelle).
+- `onvif` sert à stocker les informations ONVIF de l’équipement.
+
 ## Fonctionnalités
 
 - Dashboard global avec résumé des modules, plans, caméras et alertes.
 - Historique d’état des capteurs sur une fenêtre de temps configurable.
-- Page Plans avec onglet par plan et superposition des zones en état `ok/warning/critical`.
-- Mode édition des capteurs (drag & drop) + sauvegarde persistée des positions (**admin uniquement**).
-- Onglet **État équipements** auto-complété (caméras online/max, liste caméras, plugins actifs/inactifs).
-- Configuration plugins depuis l’UI (activation/désactivation + JSON config, **admin uniquement**).
-- Mise à jour temps réel via WebSocket.
-- Interface responsive (desktop/tablette/mobile).
-
-## Architecture
-
-- `server.js` : API REST + WebSocket + auth + intégration MQTT.
-- `public/` : frontend HTML/CSS/JS.
-- `data/` : données modules/plans/caméras/utilisateurs.
-
-## Installation
-
-```bash
-npm install
-```
-
-## Lancement
-
-```bash
-npm run dev
-```
-
-Puis ouvrir : `http://localhost:3000`.
+- Page Plans avec onglet par plan, image de plan et zones `ok/warning/critical`.
+- Mode édition des capteurs (drag & drop) + sauvegarde persistée (**admin**).
+- Onglet État équipements auto-complété.
+- Configuration UI : plugins + plans + caméras.
+- WebSocket temps réel authentifié.
+- Interface responsive.
 
 ## API rapide
 
@@ -55,35 +56,29 @@ Puis ouvrir : `http://localhost:3000`.
 - `POST /api/auth/login`
 - `GET /api/me`
 
-### Monitoring
-- `GET /api/dashboard`
+### Plugins
 - `GET /api/plugins`
 - `PATCH /api/plugins/:id/enabled` (**admin**)
 - `PUT /api/plugins/:id/config` (**admin**)
 - `POST /api/plugins/mqtt-io/publish` (**admin**)
+
+### Plans
 - `GET /api/plans`
+- `POST /api/plans` (**admin**)
+- `PUT /api/plans/:id` (**admin**)
 - `POST /api/plans/:id/zones/positions` (**admin**)
+
+### Caméras
 - `GET /api/cameras`
+- `POST /api/cameras` (**admin**)
+- `PUT /api/cameras/:id` (**admin**)
+- `GET /api/cameras/:id/playback`
+
+### Monitoring
+- `GET /api/dashboard`
 - `GET /api/equipment-status`
 - `GET /api/history?minutes=60`
 - `GET /api/health`
-
-## Plugin MQTT I/O
-
-Configuration via l’onglet Configuration > module `MQTT I/O`:
-- `brokerUrl`
-- `username` / `password`
-- `subscribeTopic`
-- `publishTopic`
-- `dataType` (`binary`, `numeric`, `text`)
-- `unit`
-- `qos`
-- `retain`
-
-Comportements:
-- `binary` : normalisé en `0|1`.
-- `numeric` : borné de `0` à `4`.
-- `text` : chaîne libre.
 
 ## Règle de contribution
 
