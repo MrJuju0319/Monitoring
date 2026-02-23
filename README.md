@@ -38,6 +38,7 @@ Exemple valide pour stockage de configuration caméra :
 - `streamUrl` peut contenir RTSP (référence source).
 - `hlsUrl` doit être renseigné pour lecture web (HLS/WebRTC via passerelle).
 - Si `hlsUrl` est vide, un **convertisseur RTSP -> flux web live (HLS)** est démarré automatiquement (`/live/<cameraId>/index.m3u8`) pour l’affichage navigateur.
+- Le convertisseur RTSP est lancé dès le démarrage du serveur pour toutes les caméras RTSP configurées (pré-chauffage), afin d’avoir un flux live prêt en continu.
 - Le mode WebSocket JSMpeg reste disponible en fallback technique.
 - Les images de plan uploadées via UI sont converties et enregistrées en **JPG** (fichiers `/public/uploads`), pas en base64.
 - `onvif` sert à stocker les informations ONVIF de l’équipement.
@@ -99,6 +100,7 @@ Endpoints associés:
 - `POST /api/cameras` (**admin**)
 - `PUT /api/cameras/:id` (**admin**)
 - `GET /api/cameras/:id/playback`
+- Convertisseur RTSP->HLS sync au démarrage serveur + resync périodique
 
 ### Monitoring
 - `GET /api/dashboard`

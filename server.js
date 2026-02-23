@@ -188,10 +188,23 @@ async function startRtspWebConverter(cameraId, rtspUrl) {
     outputPath
   ];
 
-  relay.ffmpeg = spawn(cfg.ffmpegPath || 'ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', 'pipe'] });
+  try {
+    relay.ffmpeg = spawn(cfg.ffmpegPath || 'ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', 'pipe'] });
+  } catch (error) {
+    relay.status = 'error';
+    relay.lastError = error.message;
+    relay.ffmpeg = null;
+    return relay;
+  }
   relay.startedAt = Date.now();
   relay.status = 'starting';
   relay.lastError = null;
+
+  relay.ffmpeg.on('error', (error) => {
+    relay.status = 'error';
+    relay.lastError = error.message;
+    relay.ffmpeg = null;
+  });
 
   relay.ffmpeg.stderr.on('data', (chunk) => {
     const msg = chunk.toString();
@@ -214,6 +227,20 @@ function stopRtspWebConverter(cameraId) {
     relay.ffmpeg.kill('SIGTERM');
     relay.ffmpeg = null;
     relay.status = 'idle';
+  }
+}
+
+async function syncRtspWebConverters() {
+  const cameras = await readJson(camerasFile);
+  const rtspCameras = cameras.filter((camera) => (camera.streamUrl || '').toLowerCase().startsWith('rtsp://'));
+  const ids = new Set(rtspCameras.map((camera) => camera.id));
+
+  for (const camera of rtspCameras) {
+    await startRtspWebConverter(camera.id, camera.streamUrl);
+  }
+
+  for (const [cameraId] of rtspWebState.entries()) {
+    if (!ids.has(cameraId)) stopRtspWebConverter(cameraId);
   }
 }
 
@@ -742,6 +769,7 @@ app.post('/api/cameras', authRequired, adminOnly, async (req, res) => {
   const camera = { id: randomId('cam'), name, zone, status, streamUrl, hlsUrl, onvif };
   cameras.push(camera);
   await writeJson(camerasFile, cameras);
+  await syncRtspWebConverters();
   res.status(201).json(camera);
 });
 
@@ -760,6 +788,7 @@ app.put('/api/cameras/:id', authRequired, adminOnly, async (req, res) => {
   if (onvif && typeof onvif === 'object') camera.onvif = { ...(camera.onvif || {}), ...onvif };
 
   await writeJson(camerasFile, cameras);
+  await syncRtspWebConverters();
   res.json(camera);
 });
 
@@ -850,6 +879,7 @@ const server = app.listen(port, async () => {
   await ensureUploadsDir();
   await ensureLiveDir();
   await setupMqttClientIfNeeded();
+  await syncRtspWebConverters();
   console.log(`Monitoring app running on http://localhost:${port}`);
 });
 
@@ -927,9 +957,5 @@ setInterval(async () => {
 }, 3000);
 
 setInterval(() => {
-  const now = Date.now();
-  for (const [cameraId, relay] of rtspWebState.entries()) {
-    if (!relay.ffmpeg) continue;
-    if (now - relay.lastAccess > 120000) stopRtspWebConverter(cameraId);
-  }
-}, 20000);
+  syncRtspWebConverters().catch(() => {});
+}, 15000);

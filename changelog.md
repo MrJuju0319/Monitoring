@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.2] - 2026-02-23
+
+### Added
+- Démarrage automatique (pré-chauffage) du convertisseur RTSP->HLS au lancement du serveur pour toutes les caméras RTSP déjà configurées.
+
+### Changed
+- Resynchronisation périodique des convertisseurs RTSP->HLS (démarrage des nouveaux flux RTSP et arrêt des convertisseurs devenus orphelins).
+- Création/mise à jour caméra déclenche immédiatement la sync des convertisseurs pour garder le flux live disponible en continu.
+
 ## [0.6.1] - 2026-02-23
 
 ### Added
