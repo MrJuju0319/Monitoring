@@ -40,6 +40,7 @@ const configRefreshBtn = document.getElementById('config-refresh-btn');
 
 let activeDragZoneId = null;
 const rtspPlayers = new Map();
+const hlsPlayers = new Map();
 
 function isAdmin() {
   return state.currentUser?.role === 'admin';
@@ -149,19 +150,18 @@ function cameraPlaybackHtml(camera) {
   if (!src) return '<p>Flux indisponible</p>';
 
   if (isRtsp && camera.hlsUrl) {
-    return `<video src="${camera.hlsUrl}" controls muted></video><p class="warning-text">Source RTSP + fallback HLS utilisé pour lecture web.</p>`;
+    return `<video id="cam-video-${camera.id}" src="${camera.hlsUrl}" controls muted playsinline></video><p class="warning-text">Source RTSP + fallback HLS utilisé pour lecture web.</p>`;
   }
 
   if (isRtsp) {
+    const webLive = camera.playback?.webLiveUrl || '';
     return `
-      <div class="rtsp-player-wrap">
-        <canvas id="rtsp-canvas-${camera.id}" class="rtsp-canvas"></canvas>
-      </div>
-      <p class="warning-text">RTSP relay actif: affichage via module intégré (JSMpeg + ffmpeg).</p>
+      <video id="cam-video-${camera.id}" data-hls-src="${webLive}" controls muted playsinline></video>
+      <p class="warning-text">RTSP converti automatiquement en flux web live (HLS).</p>
     `;
   }
 
-  return `<video src="${src}" controls muted></video>`;
+  return `<video src="${src}" controls muted playsinline></video>`;
 }
 
 function destroyUnusedRtspPlayers(cameraIds) {
@@ -169,6 +169,45 @@ function destroyUnusedRtspPlayers(cameraIds) {
     if (!cameraIds.includes(id)) {
       try { player.destroy(); } catch {}
       rtspPlayers.delete(id);
+    }
+  }
+}
+
+function destroyUnusedHlsPlayers(cameraIds) {
+  for (const [id, player] of hlsPlayers.entries()) {
+    if (!cameraIds.includes(id)) {
+      try {
+        player.detachMedia();
+        player.destroy();
+      } catch {}
+      hlsPlayers.delete(id);
+    }
+  }
+}
+
+function setupHlsPlayers() {
+  const rtspCameras = state.cameras.filter((camera) => (camera.streamUrl || '').toLowerCase().startsWith('rtsp://'));
+  const ids = rtspCameras.map((c) => c.id);
+  destroyUnusedHlsPlayers(ids);
+
+  for (const camera of rtspCameras) {
+    const video = document.getElementById(`cam-video-${camera.id}`);
+    if (!video) continue;
+    const hlsSource = video.dataset.hlsSrc || camera.hlsUrl || camera.playback?.webLiveUrl;
+    if (!hlsSource) continue;
+    if (hlsPlayers.has(camera.id)) continue;
+
+    if (window.Hls && window.Hls.isSupported()) {
+      const hls = new window.Hls({
+        liveSyncDurationCount: 2,
+        maxLiveSyncPlaybackRate: 1.5,
+        lowLatencyMode: true
+      });
+      hls.loadSource(hlsSource);
+      hls.attachMedia(video);
+      hlsPlayers.set(camera.id, hls);
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = hlsSource;
     }
   }
 }
@@ -214,6 +253,7 @@ function renderCameras() {
     .join('');
 
   setupRtspPlayers();
+  setupHlsPlayers();
 }
 
 function renderEquipment() {

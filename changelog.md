@@ -3,6 +3,7 @@
 ## [0.6.1] - 2026-02-23
 
 ### Added
+- Convertisseur automatique RTSP -> HLS web live (démarrage à la demande) avec exposition statique `/live/<cameraId>/index.m3u8`.
 - Plugin `visorx-control` configurable depuis le web avec:
   - action d’ouverture `open.cgi` en authentification Digest,
   - récupération d’historique `GetEvenements.cgi` sur plusieurs pages,
@@ -13,6 +14,7 @@
 - UI plugin VisorX dans la Configuration (index d’ouverture + lecture événements + sortie formatée).
 
 ### Changed
+- Lecture RTSP côté UI priorise désormais le flux HLS web live converti pour un affichage navigateur plus robuste.
 - RTSP relay renforcé avec options ffmpeg low-latency (`nobuffer`, `low_delay`, `ultrafast`, `zerolatency`).
 - Les métadonnées playback caméras incluent le statut d’état du relay pour faciliter le diagnostic.
 - Les plans stockent aussi `width/height` pour un affichage dynamique responsive fidèle au ratio d’image.

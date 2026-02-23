@@ -37,7 +37,8 @@ Exemple valide pour stockage de configuration caméra :
 
 - `streamUrl` peut contenir RTSP (référence source).
 - `hlsUrl` doit être renseigné pour lecture web (HLS/WebRTC via passerelle).
-- Si `hlsUrl` est vide, le module **rtsp-relay** (ffmpeg + JSMpeg) peut afficher un flux RTSP directement dans la page web via WebSocket MPEG-TS.
+- Si `hlsUrl` est vide, un **convertisseur RTSP -> flux web live (HLS)** est démarré automatiquement (`/live/<cameraId>/index.m3u8`) pour l’affichage navigateur.
+- Le mode WebSocket JSMpeg reste disponible en fallback technique.
 - Les images de plan uploadées via UI sont converties et enregistrées en **JPG** (fichiers `/public/uploads`), pas en base64.
 - `onvif` sert à stocker les informations ONVIF de l’équipement.
 
@@ -116,4 +117,5 @@ Conformément à la demande projet:
 
 - `ffmpeg` doit être installé sur le serveur.
 - Le plugin `rtsp-relay` doit être activé.
+- Le frontend charge `hls.js` pour lire le flux web live HLS généré automatiquement.
 - Le flux caméra utilise `streamUrl` en `rtsp://...` (ou `hlsUrl` si disponible pour fallback).

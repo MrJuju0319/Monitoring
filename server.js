@@ -21,6 +21,7 @@ const pluginsFile = path.join(dataDir, 'plugins.json');
 const plansFile = path.join(dataDir, 'plans.json');
 const camerasFile = path.join(dataDir, 'cameras.json');
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
+const liveDir = path.join(__dirname, 'public', 'live');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monitoring-super-secret';
 const MAX_HISTORY_POINTS = 10000;
@@ -36,6 +37,7 @@ const mqttState = {
 
 
 const rtspRelayState = new Map();
+const rtspWebState = new Map();
 
 function getCameraRelay(cameraId) {
   if (!rtspRelayState.has(cameraId)) {
@@ -131,9 +133,94 @@ function stopRtspRelayIfUnused(cameraId) {
   }
 }
 
+function getRtspWeb(cameraId) {
+  if (!rtspWebState.has(cameraId)) {
+    rtspWebState.set(cameraId, {
+      ffmpeg: null,
+      status: 'idle',
+      lastError: null,
+      startedAt: 0,
+      lastAccess: 0
+    });
+  }
+  return rtspWebState.get(cameraId);
+}
+
+async function ensureLiveDir() {
+  await fs.mkdir(liveDir, { recursive: true });
+}
+
+async function startRtspWebConverter(cameraId, rtspUrl) {
+  const relay = getRtspWeb(cameraId);
+  relay.lastAccess = Date.now();
+  if (relay.ffmpeg) return relay;
+
+  const cfg = await getRtspRelayConfig();
+  if (!cfg.enabled) {
+    relay.status = 'disabled';
+    relay.lastError = 'Plugin rtsp-relay désactivé';
+    return relay;
+  }
+
+  await ensureLiveDir();
+  const cameraLiveDir = path.join(liveDir, cameraId);
+  await fs.mkdir(cameraLiveDir, { recursive: true });
+  const outputPath = path.join(cameraLiveDir, 'index.m3u8');
+
+  const ffmpegArgs = [
+    '-fflags', 'nobuffer',
+    '-flags', 'low_delay',
+    '-rtsp_transport', cfg.transport || 'tcp',
+    '-i', rtspUrl,
+    '-an',
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
+    '-vf', `scale=${cfg.width || 960}:${cfg.height || 540}`,
+    '-r', String(cfg.fps || 15),
+    '-b:v', `${cfg.bitrateKbps || 1200}k`,
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-f', 'hls',
+    '-hls_time', '1',
+    '-hls_list_size', '4',
+    '-hls_flags', 'delete_segments+append_list+independent_segments+omit_endlist',
+    '-hls_segment_filename', path.join(cameraLiveDir, 'seg_%06d.ts'),
+    outputPath
+  ];
+
+  relay.ffmpeg = spawn(cfg.ffmpegPath || 'ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', 'pipe'] });
+  relay.startedAt = Date.now();
+  relay.status = 'starting';
+  relay.lastError = null;
+
+  relay.ffmpeg.stderr.on('data', (chunk) => {
+    const msg = chunk.toString();
+    if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) relay.lastError = msg.slice(0, 500);
+    if (msg.includes('Opening') || msg.includes('.ts')) relay.status = 'streaming';
+  });
+
+  relay.ffmpeg.on('close', (code) => {
+    relay.status = 'stopped';
+    if (code !== 0 && !relay.lastError) relay.lastError = `ffmpeg fermé avec code ${code}`;
+    relay.ffmpeg = null;
+  });
+
+  return relay;
+}
+
+function stopRtspWebConverter(cameraId) {
+  const relay = getRtspWeb(cameraId);
+  if (relay.ffmpeg) {
+    relay.ffmpeg.kill('SIGTERM');
+    relay.ffmpeg = null;
+    relay.status = 'idle';
+  }
+}
+
 app.use(express.json({ limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadsDir));
+app.use('/live', express.static(liveDir));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -292,9 +379,9 @@ function detectCameraPlayback(camera) {
   if (lower.startsWith('rtsp://')) {
     return {
       canPlayDirectly: false,
-      reason: 'RTSP n’est pas lisible directement par les navigateurs. Utilisez hlsUrl/WebRTC ou le module rtsp-relay intégré.',
+      reason: 'RTSP n’est pas lisible directement par les navigateurs. Le convertisseur web live (HLS) sera utilisé automatiquement.',
       recommendedUrl: camera.hlsUrl || '',
-      mode: 'rtsp-relay'
+      mode: 'rtsp-converter'
     };
   }
 
@@ -640,6 +727,7 @@ app.get('/api/cameras', authRequired, async (req, res) => {
       const relay = getCameraRelay(camera.id);
       playback.relayStatus = relay.status;
       playback.relayError = relay.lastError;
+      playback.webLiveUrl = `/live/${camera.id}/index.m3u8`;
     }
     return { ...camera, playback };
   });
@@ -681,11 +769,16 @@ app.get('/api/cameras/:id/playback', authRequired, async (req, res) => {
   if (!camera) return res.status(404).json({ error: 'Caméra introuvable' });
   const playback = detectCameraPlayback(camera);
   if ((camera.streamUrl || '').toLowerCase().startsWith('rtsp://')) {
+    await startRtspWebConverter(camera.id, camera.streamUrl);
     const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
     playback.wsUrl = `/rtsp/${camera.id}?token=${encodeURIComponent(token)}`;
     const relay = getCameraRelay(camera.id);
     playback.relayStatus = relay.status;
     playback.relayError = relay.lastError;
+    const webRelay = getRtspWeb(camera.id);
+    playback.webLiveUrl = `/live/${camera.id}/index.m3u8`;
+    playback.webRelayStatus = webRelay.status;
+    playback.webRelayError = webRelay.lastError;
   }
   res.json(playback);
 });
@@ -755,6 +848,7 @@ app.get('/api/dashboard', authRequired, async (_, res) => {
 
 const server = app.listen(port, async () => {
   await ensureUploadsDir();
+  await ensureLiveDir();
   await setupMqttClientIfNeeded();
   console.log(`Monitoring app running on http://localhost:${port}`);
 });
@@ -831,3 +925,11 @@ setInterval(async () => {
   await writeJson(plansFile, plans);
   broadcast(wss, 'zones:update', plans);
 }, 3000);
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [cameraId, relay] of rtspWebState.entries()) {
+    if (!relay.ffmpeg) continue;
+    if (now - relay.lastAccess > 120000) stopRtspWebConverter(cameraId);
+  }
+}, 20000);
