@@ -199,15 +199,22 @@ function setupHlsPlayers() {
 
     if (window.Hls && window.Hls.isSupported()) {
       const hls = new window.Hls({
-        liveSyncDurationCount: 2,
-        maxLiveSyncPlaybackRate: 1.5,
+        liveSyncDurationCount: 1,
+        liveMaxLatencyDurationCount: 2,
+        maxLiveSyncPlaybackRate: 2,
+        maxBufferLength: 2,
+        maxMaxBufferLength: 4,
         lowLatencyMode: true
       });
       hls.loadSource(hlsSource);
       hls.attachMedia(video);
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+      });
       hlsPlayers.set(camera.id, hls);
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = hlsSource;
+      video.play().catch(() => {});
     }
   }
 }
@@ -239,8 +246,6 @@ function setupRtspPlayers() {
 
 function renderCameras() {
   const count = Math.max(1, state.cameras.length);
-  const minWidth = count <= 1 ? 680 : count === 2 ? 420 : count <= 4 ? 320 : 260;
-  cameraGrid.style.gridTemplateColumns = `repeat(auto-fit, minmax(${minWidth}px, 1fr))`;
 
   cameraGrid.innerHTML = state.cameras
     .map((camera) => {

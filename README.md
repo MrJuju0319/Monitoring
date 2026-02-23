@@ -39,6 +39,7 @@ Exemple valide pour stockage de configuration caméra :
 - `hlsUrl` doit être renseigné pour lecture web (HLS/WebRTC via passerelle).
 - Si `hlsUrl` est vide, un **convertisseur RTSP -> flux web live (HLS)** est démarré automatiquement (`/live/<cameraId>/index.m3u8`) pour l’affichage navigateur.
 - Le convertisseur RTSP est lancé dès le démarrage du serveur pour toutes les caméras RTSP configurées (pré-chauffage), afin d’avoir un flux live prêt en continu.
+- Réglages ffmpeg/hls.js ajustés pour une **latence vidéo basse** (segments plus courts, buffer live réduit).
 - Le backend applique une normalisation automatique des URLs RTSP mal formatées (ex: `rtsp://ip/:554/...` devient `rtsp://ip:554/...`).
 - Le mode WebSocket JSMpeg reste disponible en fallback technique.
 - Les images de plan uploadées via UI sont converties et enregistrées en **JPG** (fichiers `/public/uploads`), pas en base64.
@@ -73,6 +74,7 @@ Endpoints associés:
 - Les mises à jour temps réel ne forcent plus de rechargement complet de la configuration pendant l’édition.
 - WebSocket temps réel authentifié.
 - Interface responsive.
+- Grille caméras responsive (desktop/tablette/mobile) avec vidéos 16:9 adaptatives.
 
 ## API rapide
 

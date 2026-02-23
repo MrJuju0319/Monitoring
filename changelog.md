@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4] - 2026-02-23
+
+### Changed
+- Réduction de la latence RTSP->HLS (ffmpeg: timestamps muraux, GOP fixe, segments HLS plus courts et playlist live réduite).
+- Réglage hls.js côté navigateur pour live sync agressif (buffer réduit, rattrapage playback plus rapide).
+- Refonte responsive de la grille caméras (tuiles fluides, ratio vidéo 16:9, meilleure adaptation mobile/tablette).
+
 ## [0.6.3] - 2026-02-23
 
 ### Changed

@@ -57,9 +57,30 @@ nav { display: flex; flex-direction: column; gap: 0.55rem; }
 .zone.warning { color:#ffd07d; border-color:#b7862f; background:rgba(247,183,49,.2); }
 .zone.critical { color:#ff9fae; border-color:#a42d45; background:rgba(235,59,90,.2); }
 
-.camera-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.7rem; }
-.camera-tile { background:#0b1017; border:1px solid var(--border); border-radius:10px; padding:.65rem; }
-.camera-tile video { width:100%; border-radius:8px; margin-top:.45rem; max-height:130px; object-fit:cover; }
+.camera-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+  gap: .7rem;
+}
+
+.camera-tile {
+  background: #0b1017;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: .65rem;
+  min-width: 0;
+}
+
+.camera-tile video {
+  width: 100%;
+  border-radius: 8px;
+  margin-top: .45rem;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  max-height: min(38vh, 320px);
+  object-fit: cover;
+  background: #000;
+}
 
 .config-tab { display:none; }
 .config-tab.active { display:block; }
@@ -114,4 +135,20 @@ button.save { margin-top:.45rem; background:var(--primary); color:white; border:
 
 .camera-tile {
   min-height: 220px;
+}
+
+@media (max-width: 1200px) {
+  .camera-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .camera-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .camera-tile video {
+    max-height: 42vh;
+  }
 }

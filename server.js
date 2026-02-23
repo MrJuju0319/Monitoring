@@ -182,6 +182,7 @@ async function startRtspWebConverter(cameraId, rtspUrl) {
   const ffmpegArgs = [
     '-fflags', 'nobuffer',
     '-flags', 'low_delay',
+    '-use_wallclock_as_timestamps', '1',
     '-rtsp_transport', cfg.transport || 'tcp',
     '-i', normalizedRtsp,
     '-an',
@@ -192,10 +193,13 @@ async function startRtspWebConverter(cameraId, rtspUrl) {
     '-b:v', `${cfg.bitrateKbps || 1200}k`,
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
+    '-g', String(Math.max(10, Number(cfg.fps || 15))),
+    '-keyint_min', String(Math.max(10, Number(cfg.fps || 15))),
+    '-sc_threshold', '0',
     '-f', 'hls',
-    '-hls_time', '1',
-    '-hls_list_size', '4',
-    '-hls_flags', 'delete_segments+append_list+independent_segments+omit_endlist',
+    '-hls_time', '0.5',
+    '-hls_list_size', '2',
+    '-hls_flags', 'delete_segments+append_list+independent_segments+omit_endlist+split_by_time+program_date_time',
     '-hls_segment_filename', path.join(cameraLiveDir, 'seg_%06d.ts'),
     outputPath
   ];
