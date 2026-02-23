@@ -1,6 +1,8 @@
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import mqtt from 'mqtt';
+import multer from 'multer';
+import sharp from 'sharp';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -16,6 +18,7 @@ const usersFile = path.join(dataDir, 'users.json');
 const pluginsFile = path.join(dataDir, 'plugins.json');
 const plansFile = path.join(dataDir, 'plans.json');
 const camerasFile = path.join(dataDir, 'cameras.json');
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'monitoring-super-secret';
 const MAX_HISTORY_POINTS = 10000;
@@ -31,6 +34,9 @@ const mqttState = {
 
 app.use(express.json({ limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(uploadsDir));
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 async function readJson(file) {
   const content = await fs.readFile(file, 'utf-8');
@@ -39,6 +45,23 @@ async function readJson(file) {
 
 async function writeJson(file, data) {
   await fs.writeFile(file, JSON.stringify(data, null, 2));
+}
+
+async function ensureUploadsDir() {
+  await fs.mkdir(uploadsDir, { recursive: true });
+}
+
+async function saveImageAsJpg(fileBuffer, prefix = 'plan') {
+  await ensureUploadsDir();
+  const fileName = `${prefix}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}.jpg`;
+  const absolutePath = path.join(uploadsDir, fileName);
+
+  await sharp(fileBuffer)
+    .rotate()
+    .jpeg({ quality: 82, mozjpeg: true })
+    .toFile(absolutePath);
+
+  return `/uploads/${fileName}`;
 }
 
 function randomId(prefix) {
@@ -302,16 +325,26 @@ app.get('/api/plans', authRequired, async (_, res) => {
   res.json(plans);
 });
 
-app.post('/api/plans', authRequired, adminOnly, async (req, res) => {
-  const { name, backgroundImage = '', zones = [] } = req.body;
+app.post('/api/plans', authRequired, adminOnly, upload.single('image'), async (req, res) => {
+  const name = req.body.name;
   if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name requis' });
 
   const plans = await readJson(plansFile);
+  let backgroundImage = '';
+
+  if (req.file?.buffer) {
+    try {
+      backgroundImage = await saveImageAsJpg(req.file.buffer, 'plan');
+    } catch {
+      return res.status(400).json({ error: 'Image invalide (attendu: JPG/PNG/WebP...)' });
+    }
+  }
+
   const plan = {
     id: randomId('plan'),
-    name,
+    name: name.trim(),
     backgroundImage,
-    zones: Array.isArray(zones) ? zones : []
+    zones: []
   };
 
   plans.push(plan);
@@ -319,15 +352,21 @@ app.post('/api/plans', authRequired, adminOnly, async (req, res) => {
   res.status(201).json(plan);
 });
 
-app.put('/api/plans/:id', authRequired, adminOnly, async (req, res) => {
+app.put('/api/plans/:id', authRequired, adminOnly, upload.single('image'), async (req, res) => {
   const { id } = req.params;
-  const { name, backgroundImage } = req.body;
   const plans = await readJson(plansFile);
   const plan = plans.find((item) => item.id === id);
   if (!plan) return res.status(404).json({ error: 'Plan introuvable' });
 
-  if (typeof name === 'string' && name.trim()) plan.name = name.trim();
-  if (typeof backgroundImage === 'string') plan.backgroundImage = backgroundImage;
+  if (typeof req.body.name === 'string' && req.body.name.trim()) plan.name = req.body.name.trim();
+
+  if (req.file?.buffer) {
+    try {
+      plan.backgroundImage = await saveImageAsJpg(req.file.buffer, 'plan');
+    } catch {
+      return res.status(400).json({ error: 'Image invalide (attendu: JPG/PNG/WebP...)' });
+    }
+  }
 
   await writeJson(plansFile, plans);
   res.json(plan);
@@ -462,6 +501,7 @@ app.get('/api/dashboard', authRequired, async (_, res) => {
 });
 
 const server = app.listen(port, async () => {
+  await ensureUploadsDir();
   await setupMqttClientIfNeeded();
   console.log(`Monitoring app running on http://localhost:${port}`);
 });

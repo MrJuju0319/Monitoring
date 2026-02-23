@@ -248,12 +248,15 @@ async function savePlanZonesPositions() {
   await loadData();
 }
 
-async function createPlanFromForm(name, imageDataUrl) {
+async function createPlanFromForm(name, imageInput) {
   if (!isAdmin()) return;
+  const form = new FormData();
+  form.append('name', name);
+  if (imageInput.files?.[0]) form.append('image', imageInput.files[0]);
+
   const response = await apiFetch('/api/plans', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, backgroundImage: imageDataUrl, zones: [] })
+    body: form
   });
 
   if (!response.ok) return logEvent('Erreur création plan');
@@ -261,12 +264,15 @@ async function createPlanFromForm(name, imageDataUrl) {
   await loadData();
 }
 
-async function savePlanMeta(planId, name, backgroundImage) {
+async function savePlanMeta(planId, name, imageInput) {
   if (!isAdmin()) return;
+  const form = new FormData();
+  form.append('name', name);
+  if (imageInput.files?.[0]) form.append('image', imageInput.files[0]);
+
   const response = await apiFetch(`/api/plans/${planId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, backgroundImage })
+    body: form
   });
   if (!response.ok) return logEvent('Erreur mise à jour plan');
   logEvent(`Plan ${planId} mis à jour`);
@@ -448,18 +454,6 @@ async function loadData() {
   renderConfig();
 }
 
-function fileToDataUrl(input) {
-  const file = input.files?.[0];
-  if (!file) return Promise.resolve('');
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Lecture image impossible'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function initNavigation() {
   document.querySelectorAll('.nav-btn').forEach((button) => {
     button.addEventListener('click', () => {
@@ -524,16 +518,16 @@ function initNavigation() {
     const createPlanBtn = event.target.closest('[data-create-plan]');
     if (createPlanBtn) {
       const name = document.getElementById('new-plan-name').value.trim();
-      const dataUrl = await fileToDataUrl(document.getElementById('new-plan-image'));
-      return createPlanFromForm(name, dataUrl);
+      const imageInput = document.getElementById('new-plan-image');
+      return createPlanFromForm(name, imageInput);
     }
 
     const savePlanBtn = event.target.closest('[data-save-plan]');
     if (savePlanBtn) {
       const planId = savePlanBtn.dataset.savePlan;
       const name = document.getElementById(`plan-name-${planId}`).value.trim();
-      const dataUrl = await fileToDataUrl(document.getElementById(`plan-image-${planId}`));
-      return savePlanMeta(planId, name, dataUrl);
+      const imageInput = document.getElementById(`plan-image-${planId}`);
+      return savePlanMeta(planId, name, imageInput);
     }
 
     const createCamBtn = event.target.closest('[data-create-camera]');
@@ -579,6 +573,17 @@ function initNavigation() {
     const checkbox = event.target.closest('[data-plugin-id]');
     if (checkbox) togglePlugin(checkbox.dataset.pluginId, checkbox.checked);
   });
+}
+
+
+function startAutoRefresh() {
+  setInterval(async () => {
+    if (!state.token || appView.classList.contains('hidden')) return;
+    const configPageActive = document.getElementById('config').classList.contains('active');
+    if (!configPageActive) return;
+    await loadData();
+    logEvent('Auto-actualisation configuration');
+  }, 8000);
 }
 
 function initRealtime() {
@@ -633,6 +638,7 @@ loginForm.addEventListener('submit', async (event) => {
   await loadData();
   await loadHistory();
   initRealtime();
+  startAutoRefresh();
 });
 
 logoutBtn.addEventListener('click', logout);
@@ -643,5 +649,6 @@ initSession().then(async (ok) => {
   await loadData();
   await loadHistory();
   initRealtime();
+  startAutoRefresh();
   setInterval(loadHistory, 10000);
 });

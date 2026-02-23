@@ -37,6 +37,7 @@ Exemple valide pour stockage de configuration caméra :
 
 - `streamUrl` peut contenir RTSP (référence source).
 - `hlsUrl` doit être renseigné pour lecture web (HLS/WebRTC via passerelle).
+- Les images de plan uploadées via UI sont converties et enregistrées en **JPG** (fichiers `/public/uploads`), pas en base64.
 - `onvif` sert à stocker les informations ONVIF de l’équipement.
 
 ## Fonctionnalités
@@ -47,6 +48,7 @@ Exemple valide pour stockage de configuration caméra :
 - Mode édition des capteurs (drag & drop) + sauvegarde persistée (**admin**).
 - Onglet État équipements auto-complété.
 - Configuration UI : plugins + plans + caméras.
+- Auto-actualisation des onglets de configuration (rafraîchissement périodique).
 - WebSocket temps réel authentifié.
 - Interface responsive.
 
@@ -64,8 +66,8 @@ Exemple valide pour stockage de configuration caméra :
 
 ### Plans
 - `GET /api/plans`
-- `POST /api/plans` (**admin**)
-- `PUT /api/plans/:id` (**admin**)
+- `POST /api/plans` (**admin**, `multipart/form-data` avec `name` + `image`)
+- `PUT /api/plans/:id` (**admin**, `multipart/form-data` avec `name` + `image`)
 - `POST /api/plans/:id/zones/positions` (**admin**)
 
 ### Caméras
