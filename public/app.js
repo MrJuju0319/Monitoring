@@ -36,6 +36,7 @@ const equipmentCameraList = document.getElementById('equipment-camera-list');
 const equipmentPluginList = document.getElementById('equipment-plugin-list');
 const editModeToggle = document.getElementById('edit-mode-toggle');
 const savePlanButton = document.getElementById('save-plan-btn');
+const configRefreshBtn = document.getElementById('config-refresh-btn');
 
 let activeDragZoneId = null;
 
@@ -142,7 +143,7 @@ function cameraPlaybackHtml(camera) {
 
   if (!src) return '<p>Flux indisponible</p>';
   if (isRtsp) {
-    return `<p class="warning-text">RTSP détecté: non lisible directement dans le navigateur.<br/>Ajoute une URL HLS/WebRTC dans <strong>hlsUrl</strong> pour l’affichage web.</p>`;
+    return `<p class="warning-text">RTSP détecté: un navigateur ne peut pas lire <code>rtsp://</code> directement. Configure <strong>hlsUrl</strong> (ou WebRTC via passerelle) dans l’onglet Caméras.</p>`;
   }
 
   return `<video src="${src}" controls muted></video>`;
@@ -478,6 +479,10 @@ function initNavigation() {
   });
 
   savePlanButton.addEventListener('click', savePlanZonesPositions);
+  configRefreshBtn.addEventListener('click', async () => {
+    await loadData();
+    logEvent('Configuration rafraîchie manuellement');
+  });
 
   planCanvas.addEventListener('pointerdown', (event) => {
     if (!state.editingMode || !isAdmin()) return;
@@ -576,16 +581,6 @@ function initNavigation() {
 }
 
 
-function startAutoRefresh() {
-  setInterval(async () => {
-    if (!state.token || appView.classList.contains('hidden')) return;
-    const configPageActive = document.getElementById('config').classList.contains('active');
-    if (!configPageActive) return;
-    await loadData();
-    logEvent('Auto-actualisation configuration');
-  }, 8000);
-}
-
 function initRealtime() {
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws?token=${encodeURIComponent(state.token)}`);
@@ -638,7 +633,6 @@ loginForm.addEventListener('submit', async (event) => {
   await loadData();
   await loadHistory();
   initRealtime();
-  startAutoRefresh();
 });
 
 logoutBtn.addEventListener('click', logout);
@@ -649,6 +643,5 @@ initSession().then(async (ok) => {
   await loadData();
   await loadHistory();
   initRealtime();
-  startAutoRefresh();
   setInterval(loadHistory, 10000);
 });

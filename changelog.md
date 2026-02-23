@@ -1,10 +1,10 @@
 # Changelog
 
-## [0.5.0] - 2026-02-20
+## [0.5.1] - 2026-02-20
 
 ### Added
 - Configuration complète depuis la page web pour les plugins, les plans et les caméras.
-- Auto-actualisation des données dans la page Configuration.
+- Rafraîchissement manuel des données de Configuration via bouton dédié (suppression de l’auto-refresh).
 - Création de plans depuis l’interface web avec ajout d’image de plan.
 - Mise à jour de métadonnées de plans depuis l’UI (nom + image).
 - Gestion des caméras depuis l’UI (ajout, édition, RTSP/HLS/ONVIF, statut, zone).
@@ -16,7 +16,7 @@
   - `GET /api/cameras/:id/playback`
 
 ### Changed
-- Affichage caméras: détection RTSP et message explicite en UI (RTSP non lisible directement par navigateur).
+- Affichage caméras: message RTSP clarifié (nécessité HLS/WebRTC pour le navigateur).
 - Upload image plan: remplacement du base64 par enregistrement fichier JPG dans `/public/uploads`.
 - Support de l’image de fond des plans dans la page Plans.
 - README enrichi avec exemples de configuration RTSP/ONVIF et recommandations HLS.

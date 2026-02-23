@@ -48,7 +48,8 @@ Exemple valide pour stockage de configuration caméra :
 - Mode édition des capteurs (drag & drop) + sauvegarde persistée (**admin**).
 - Onglet État équipements auto-complété.
 - Configuration UI : plugins + plans + caméras.
-- Auto-actualisation des onglets de configuration (rafraîchissement périodique).
+- Bouton **Rafraîchir** dans l’onglet Configuration pour recharger manuellement les données.
+- Pas d’auto-actualisation des onglets de configuration (rafraîchissement manuel via bouton dédié).
 - WebSocket temps réel authentifié.
 - Interface responsive.
 
