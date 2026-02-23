@@ -8,6 +8,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { once } from 'node:events';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,9 +79,13 @@ async function startRtspRelay(cameraId, rtspUrl) {
   }
 
   const ffmpegArgs = [
+    '-fflags', 'nobuffer',
+    '-flags', 'low_delay',
     '-rtsp_transport', cfg.transport || 'tcp',
     '-i', rtspUrl,
     '-an',
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
     '-vf', `scale=${cfg.width || 960}:${cfg.height || 540}`,
     '-r', String(cfg.fps || 15),
     '-b:v', `${cfg.bitrateKbps || 1200}k`,
@@ -150,12 +155,64 @@ async function saveImageAsJpg(fileBuffer, prefix = 'plan') {
   const fileName = `${prefix}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}.jpg`;
   const absolutePath = path.join(uploadsDir, fileName);
 
-  await sharp(fileBuffer)
+  const info = await sharp(fileBuffer)
     .rotate()
     .jpeg({ quality: 82, mozjpeg: true })
     .toFile(absolutePath);
 
-  return `/uploads/${fileName}`;
+  return { url: `/uploads/${fileName}`, width: info.width || 1600, height: info.height || 900 };
+}
+
+function buildVisorxConfig(config = {}) {
+  return {
+    scheme: config.scheme === 'https' ? 'https' : 'http',
+    host: (config.host || '').trim(),
+    user: String(config.user || '').trim(),
+    code: String(config.code || '').trim(),
+    openPath: config.openPath || '/FR/open.cgi',
+    eventsPath: config.eventsPath || '/FR/GetEvenements.cgi',
+    timeoutSeconds: Number(config.timeoutSeconds) > 0 ? Math.min(Number(config.timeoutSeconds), 25) : 8,
+    natureMap: typeof config.natureMap === 'object' && config.natureMap ? config.natureMap : {},
+    readerMap: typeof config.readerMap === 'object' && config.readerMap ? config.readerMap : {},
+    userMap: typeof config.userMap === 'object' && config.userMap ? config.userMap : {}
+  };
+}
+
+async function runCurl(args) {
+  const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '';
+  let stderr = '';
+
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const [code] = await once(child, 'close');
+  return { code: Number(code), stdout, stderr };
+}
+
+function parseVisorxEvents(rawBody, maps = {}) {
+  const chunks = String(rawBody || '').split('#');
+  const events = [];
+
+  for (const chunk of chunks) {
+    const value = chunk.trim();
+    if (!value || /^\d+$/.test(value)) continue;
+    const parts = value.split('$');
+    if (parts.length < 5) continue;
+
+    const [date, natureId, readerId, ident, personId] = parts;
+    const nature = maps.natureMap?.[natureId] || natureId;
+    const reader = maps.readerMap?.[readerId] || readerId;
+    const userName = maps.userMap?.[ident] || '';
+
+    events.push({ date, natureId, nature, readerId, reader, ident, personId, userName });
+  }
+
+  return events;
 }
 
 function randomId(prefix) {
@@ -415,6 +472,78 @@ app.post('/api/plugins/:id/publish', authRequired, adminOnly, async (req, res) =
   return res.json({ ok: true, topic: cfg.publishTopic, value: String(value ?? '') });
 });
 
+app.post('/api/plugins/visorx-control/open', authRequired, adminOnly, async (req, res) => {
+  const index = Number(req.body?.index);
+  if (!Number.isInteger(index) || index < 0) return res.status(400).json({ error: 'index invalide' });
+
+  const plugins = await readJson(pluginsFile);
+  const plugin = plugins.find((item) => item.id === 'visorx-control');
+  if (!plugin?.enabled) return res.status(400).json({ error: 'Plugin visorx-control inactif' });
+
+  const cfg = buildVisorxConfig(plugin.config);
+  if (!cfg.host || !cfg.user || !cfg.code) return res.status(400).json({ error: 'Configuration VisorX incomplète (host/user/code)' });
+
+  const url = `${cfg.scheme}://${cfg.host}${cfg.openPath}?index=${index}`;
+  const result = await runCurl([
+    '-sS',
+    '--digest',
+    '-u', `${cfg.user}:${cfg.code}`,
+    '-o', '/dev/null',
+    '-w', '%{http_code}',
+    '--max-time', String(cfg.timeoutSeconds),
+    url
+  ]);
+
+  const httpCode = (result.stdout || '000').trim() || '000';
+  let statusText = 'Error';
+  let success = false;
+
+  if (/^2\d\d$/.test(httpCode)) {
+    statusText = 'OK';
+    success = true;
+  } else if (/^3\d\d$/.test(httpCode)) {
+    statusText = 'Redirection (possible succès)';
+    success = true;
+  } else if (httpCode === '401' || httpCode === '403') {
+    statusText = 'Auth failed';
+  } else if (httpCode === '000') {
+    statusText = 'Curl failed or timeout';
+  }
+
+  res.status(success ? 200 : 502).json({ ok: success, httpCode, statusText, url });
+});
+
+app.get('/api/plugins/visorx-control/events', authRequired, async (req, res) => {
+  const pages = Number(req.query.pages ?? 1);
+  const safePages = Number.isFinite(pages) && pages > 0 ? Math.min(pages, 20) : 1;
+
+  const plugins = await readJson(pluginsFile);
+  const plugin = plugins.find((item) => item.id === 'visorx-control');
+  if (!plugin?.enabled) return res.status(400).json({ error: 'Plugin visorx-control inactif' });
+
+  const cfg = buildVisorxConfig(plugin.config);
+  if (!cfg.host || !cfg.user || !cfg.code) return res.status(400).json({ error: 'Configuration VisorX incomplète (host/user/code)' });
+
+  const allEvents = [];
+  for (let idx = 0; idx < safePages; idx += 1) {
+    const url = `${cfg.scheme}://${cfg.host}${cfg.eventsPath}?index=${idx}`;
+    const result = await runCurl([
+      '-sS',
+      '--digest',
+      '-u', `${cfg.user}:${cfg.code}`,
+      '--max-time', String(cfg.timeoutSeconds),
+      url
+    ]);
+
+    if (result.code !== 0 || !result.stdout.trim()) break;
+    const events = parseVisorxEvents(result.stdout, cfg);
+    if (!events.length) break;
+    allEvents.push(...events);
+  }
+
+  res.json({ pages: safePages, total: allEvents.length, events: allEvents });
+});
+
 app.get('/api/plans', authRequired, async (_, res) => {
   const plans = await readJson(plansFile);
   res.json(plans);
@@ -426,10 +555,15 @@ app.post('/api/plans', authRequired, adminOnly, upload.single('image'), async (r
 
   const plans = await readJson(plansFile);
   let backgroundImage = '';
+  let width = 1600;
+  let height = 900;
 
   if (req.file?.buffer) {
     try {
-      backgroundImage = await saveImageAsJpg(req.file.buffer, 'plan');
+      const saved = await saveImageAsJpg(req.file.buffer, 'plan');
+      backgroundImage = saved.url;
+      width = saved.width;
+      height = saved.height;
     } catch {
       return res.status(400).json({ error: 'Image invalide (attendu: JPG/PNG/WebP...)' });
     }
@@ -439,6 +573,8 @@ app.post('/api/plans', authRequired, adminOnly, upload.single('image'), async (r
     id: randomId('plan'),
     name: name.trim(),
     backgroundImage,
+    width,
+    height,
     zones: []
   };
 
@@ -457,7 +593,10 @@ app.put('/api/plans/:id', authRequired, adminOnly, upload.single('image'), async
 
   if (req.file?.buffer) {
     try {
-      plan.backgroundImage = await saveImageAsJpg(req.file.buffer, 'plan');
+      const saved = await saveImageAsJpg(req.file.buffer, 'plan');
+      plan.backgroundImage = saved.url;
+      plan.width = saved.width;
+      plan.height = saved.height;
     } catch {
       return res.status(400).json({ error: 'Image invalide (attendu: JPG/PNG/WebP...)' });
     }
@@ -498,6 +637,9 @@ app.get('/api/cameras', authRequired, async (req, res) => {
     const playback = detectCameraPlayback(camera);
     if ((camera.streamUrl || '').toLowerCase().startsWith('rtsp://')) {
       playback.wsUrl = `/rtsp/${camera.id}?token=${encodeURIComponent(token)}`;
+      const relay = getCameraRelay(camera.id);
+      playback.relayStatus = relay.status;
+      playback.relayError = relay.lastError;
     }
     return { ...camera, playback };
   });

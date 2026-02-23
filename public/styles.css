@@ -49,7 +49,7 @@ nav { display: flex; flex-direction: column; gap: 0.55rem; }
 .event-log li { margin-bottom: 0.4rem; color: var(--muted); }
 .tabs { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
 
-.plan-canvas { min-height: 320px; border-radius: 14px; border: 1px dashed var(--border); background: #05080c; position: relative; overflow: hidden; margin-bottom: 0.9rem; }
+.plan-canvas { width: 100%; min-height: 320px; max-height: 78vh; border-radius: 14px; border: 1px dashed var(--border); background: #05080c; position: relative; overflow: hidden; margin-bottom: 0.9rem; }
 .zone { position:absolute; transform:translate(-50%,-50%); padding:0.28rem .5rem; border-radius:8px; font-size:.75rem; border:1px solid; white-space:nowrap; touch-action:none; }
 .plan-canvas.editing .zone { cursor: grab; }
 .plan-canvas.editing .zone.dragging { cursor: grabbing; }
@@ -79,6 +79,7 @@ button.save { margin-top:.45rem; background:var(--primary); color:white; border:
 .history-summary { display:flex; gap:.8rem; flex-wrap:wrap; color:var(--muted); margin-bottom:.5rem; }
 .mqtt-grid { display:grid; gap:.45rem; margin-top:.45rem; }
 .readonly-note { color:#ffd07d; font-size:.9rem; }
+.plugin-log { margin-top:.35rem; background:#0b1017; border:1px solid var(--border); border-radius:8px; padding:.55rem; min-height:90px; max-height:230px; overflow:auto; white-space:pre-wrap; color:var(--muted); }
 
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }

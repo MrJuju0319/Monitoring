@@ -131,8 +131,12 @@ function renderPlans() {
   }
 
   state.activePlanId = activePlan.id;
+  const planWidth = Number(activePlan.width) > 0 ? Number(activePlan.width) : 1600;
+  const planHeight = Number(activePlan.height) > 0 ? Number(activePlan.height) : 900;
+  planCanvas.style.aspectRatio = `${planWidth} / ${planHeight}`;
   planCanvas.style.backgroundImage = activePlan.backgroundImage ? `url(${activePlan.backgroundImage})` : '';
-  planCanvas.style.backgroundSize = 'cover';
+  planCanvas.style.backgroundSize = 'contain';
+  planCanvas.style.backgroundRepeat = 'no-repeat';
   planCanvas.style.backgroundPosition = 'center';
   planCanvas.innerHTML = activePlan.zones.map(zoneBadge).join('');
   planCanvas.classList.toggle('editing', state.editingMode && isAdmin());
@@ -391,6 +395,16 @@ function renderPluginsConfig() {
           </div>`
         : '';
 
+      const visorxExtra = plugin.id === 'visorx-control'
+        ? `<div class="mqtt-grid">
+            <label>Index ouverture <input class="plugin-input" id="visorx-open-index" type="number" min="0" placeholder="13" ${isAdmin() ? '' : 'disabled'} /></label>
+            <button class="save" data-visorx-open ${isAdmin() ? '' : 'disabled'}>Envoyer ouverture</button>
+            <label>Historique pages <input class="plugin-input" id="visorx-pages" type="number" min="1" max="20" value="1" /></label>
+            <button class="save" data-visorx-events>Lire événements</button>
+            <pre id="visorx-events-output" class="plugin-log"></pre>
+          </div>`
+        : '';
+
       return `<article class="plugin-item">
         <div>
           <h3>${plugin.name}</h3><p>${plugin.description}</p>
@@ -398,6 +412,7 @@ function renderPluginsConfig() {
           <textarea id="config-${plugin.id}" ${isAdmin() ? '' : 'disabled'}>${JSON.stringify(plugin.config, null, 2)}</textarea>
           <button class="save" data-save-id="${plugin.id}" ${isAdmin() ? '' : 'disabled'}>Sauvegarder la configuration</button>
           ${mqttExtra}
+          ${visorxExtra}
         </div>
         <label class="switch"><span>${plugin.enabled ? 'Activé' : 'Désactivé'}</span>
           <input type="checkbox" data-plugin-id="${plugin.id}" ${plugin.enabled ? 'checked' : ''} ${isAdmin() ? '' : 'disabled'} />
@@ -506,6 +521,33 @@ async function loadData() {
   renderConfig();
 }
 
+async function sendVisorxOpen(index) {
+  if (!isAdmin()) return;
+  const response = await apiFetch('/api/plugins/visorx-control/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index: Number(index) })
+  });
+  const payload = await response.json();
+  if (!response.ok) return logEvent(`VisorX erreur: ${payload.error || payload.statusText || 'inconnue'}`);
+  logEvent(`VisorX open index ${index}: HTTP ${payload.httpCode} (${payload.statusText})`);
+}
+
+async function loadVisorxEvents(pages) {
+  const response = await apiFetch(`/api/plugins/visorx-control/events?pages=${Number(pages) || 1}`);
+  const output = document.getElementById('visorx-events-output');
+  const payload = await response.json();
+  if (!output) return;
+  if (!response.ok) {
+    output.textContent = payload.error || 'Erreur récupération événements';
+    return;
+  }
+  output.textContent = payload.events
+    .slice(0, 50)
+    .map((event) => `${event.date} | ${event.nature} | ${event.reader} | ${event.ident} | ${event.userName || '-'}`)
+    .join('\n') || 'Aucun événement';
+}
+
 function initNavigation() {
   document.querySelectorAll('.nav-btn').forEach((button) => {
     button.addEventListener('click', () => {
@@ -569,6 +611,18 @@ function initNavigation() {
     if (publishButton) {
       const value = document.getElementById('mqtt-publish')?.value ?? '';
       return publishMqttValue(value);
+    }
+
+    const visorxOpenBtn = event.target.closest('[data-visorx-open]');
+    if (visorxOpenBtn) {
+      const index = document.getElementById('visorx-open-index')?.value ?? '';
+      return sendVisorxOpen(index);
+    }
+
+    const visorxEventsBtn = event.target.closest('[data-visorx-events]');
+    if (visorxEventsBtn) {
+      const pages = document.getElementById('visorx-pages')?.value ?? '1';
+      return loadVisorxEvents(pages);
     }
 
     const createPlanBtn = event.target.closest('[data-create-plan]');
@@ -647,7 +701,6 @@ function initRealtime() {
     if (data.type === 'zones:update') {
       state.plans = data.payload;
       renderPlans();
-      await loadData();
       await loadHistory();
     }
   };
@@ -694,5 +747,4 @@ initSession().then(async (ok) => {
   await loadData();
   await loadHistory();
   initRealtime();
-  setInterval(loadHistory, 10000);
 });

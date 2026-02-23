@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.1] - 2026-02-23
+
+### Added
+- Plugin `visorx-control` configurable depuis le web avec:
+  - action d’ouverture `open.cgi` en authentification Digest,
+  - récupération d’historique `GetEvenements.cgi` sur plusieurs pages,
+  - mapping nature/lecteur/utilisateur configurable en JSON.
+- Nouveaux endpoints:
+  - `POST /api/plugins/visorx-control/open`
+  - `GET /api/plugins/visorx-control/events?pages=...`
+- UI plugin VisorX dans la Configuration (index d’ouverture + lecture événements + sortie formatée).
+
+### Changed
+- RTSP relay renforcé avec options ffmpeg low-latency (`nobuffer`, `low_delay`, `ultrafast`, `zerolatency`).
+- Les métadonnées playback caméras incluent le statut d’état du relay pour faciliter le diagnostic.
+- Les plans stockent aussi `width/height` pour un affichage dynamique responsive fidèle au ratio d’image.
+- La vue plan utilise `background-size: contain` + `aspect-ratio` dynamique.
+- Suppression du rechargement complet (`loadData`) sur chaque événement zone temps réel pour éviter toute sensation d’auto-refresh de la configuration.
+
 ## [0.6.0] - 2026-02-20
 
 ### Added

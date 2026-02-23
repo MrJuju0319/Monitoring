@@ -8,14 +8,14 @@
         "label": "Accueil",
         "x": 24,
         "y": 18,
-        "state": "warning"
+        "state": "ok"
       },
       {
         "id": "zone-b",
         "label": "Stockage",
         "x": 52,
         "y": 68,
-        "state": "ok"
+        "state": "warning"
       },
       {
         "id": "zone-c",
@@ -24,7 +24,10 @@
         "y": 82,
         "state": "ok"
       }
-    ]
+    ],
+    "width": 1600,
+    "height": 900,
+    "backgroundImage": ""
   },
   {
     "id": "bureaux",
@@ -51,6 +54,9 @@
         "y": 74,
         "state": "ok"
       }
-    ]
+    ],
+    "width": 1600,
+    "height": 900,
+    "backgroundImage": ""
   }
 ]

@@ -41,6 +41,22 @@ Exemple valide pour stockage de configuration caméra :
 - Les images de plan uploadées via UI sont converties et enregistrées en **JPG** (fichiers `/public/uploads`), pas en base64.
 - `onvif` sert à stocker les informations ONVIF de l’équipement.
 
+
+## Plugin VisorX (nouveau)
+
+Un plugin **VisorX Control** est disponible dans l’onglet Configuration > Plugins.
+
+Il permet:
+- pilotage d’ouverture via `open.cgi` (auth Digest) avec index configurable,
+- lecture de l’historique via `GetEvenements.cgi` sur N pages,
+- tables de correspondance configurables (nature/lecteur/utilisateur) directement en JSON dans la config plugin.
+
+Endpoints associés:
+- `POST /api/plugins/visorx-control/open` (**admin**)
+- `GET /api/plugins/visorx-control/events?pages=1`
+
+> Notes: config minimale requise `host`, `user`, `code`.
+
 ## Fonctionnalités
 
 - Dashboard global avec résumé des modules, plans, caméras et alertes.
@@ -51,6 +67,7 @@ Exemple valide pour stockage de configuration caméra :
 - Configuration UI : plugins + plans + caméras.
 - Bouton **Rafraîchir** dans l’onglet Configuration pour recharger manuellement les données.
 - Pas d’auto-actualisation des onglets de configuration (rafraîchissement manuel via bouton dédié).
+- Les mises à jour temps réel ne forcent plus de rechargement complet de la configuration pendant l’édition.
 - WebSocket temps réel authentifié.
 - Interface responsive.
 
@@ -63,9 +80,12 @@ Exemple valide pour stockage de configuration caméra :
 ### Plugins
 - `GET /api/plugins`
 - Plugin `RTSP Relay` configurable dans la page Configuration (ffmpegPath, résolution, FPS, bitrate).
+- Plugin `VisorX Control` configurable en web (Digest + open.cgi + historique événements).
 - `PATCH /api/plugins/:id/enabled` (**admin**)
 - `PUT /api/plugins/:id/config` (**admin**)
 - `POST /api/plugins/mqtt-io/publish` (**admin**)
+- `POST /api/plugins/visorx-control/open` (**admin**)
+- `GET /api/plugins/visorx-control/events?pages=1`
 
 ### Plans
 - `GET /api/plans`
