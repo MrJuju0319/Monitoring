@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.6] - 2026-02-24
+
+### Added
+- Sortie convertisseur RTSP->HLS en deux qualités: **HD** (`/live/<cameraId>/hd/index.m3u8`) et **LD** (`/live/<cameraId>/ld/index.m3u8`).
+- Sélecteur de qualité HD/LD dans le dock caméra de la page Plans.
+- Suppression caméra depuis la page Configuration (bouton UI + endpoint `DELETE /api/cameras/:id`).
+
+### Changed
+- Métadonnées playback caméras enrichies (`webLiveHdUrl`, `webLiveLdUrl`, `webLiveUrl`).
+- Accès facilité à la configuration plugins depuis l’onglet Configuration (raccourci “Ouvrir section ...”).
+
 ## [0.6.5] - 2026-02-23
 
 ### Added

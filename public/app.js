@@ -161,7 +161,9 @@ function renderPlans() {
 }
 
 function cameraPlaybackHtml(camera) {
-  const src = camera.hlsUrl || camera.streamUrl || '';
+  const streamQuality = localStorage.getItem('camera_quality') || 'ld';
+  const liveSource = streamQuality === 'hd' ? (camera.playback?.webLiveHdUrl || camera.playback?.webLiveUrl) : (camera.playback?.webLiveLdUrl || camera.playback?.webLiveUrl);
+  const src = camera.hlsUrl || liveSource || camera.streamUrl || '';
   const isRtsp = (camera.streamUrl || '').toLowerCase().startsWith('rtsp://');
 
   if (!src) return '<p>Flux indisponible</p>';
@@ -266,7 +268,7 @@ function cameraFocusHtml(camera) {
   if (!camera) return '<p class="warning-text">Sélectionnez une caméra dans la liste.</p>';
   const src = camera.hlsUrl || camera.playback?.webLiveUrl || camera.streamUrl || '';
   if (!src) return `<p class="warning-text">${camera.name}: flux indisponible.</p>`;
-  return `<article class="camera-focus-card"><strong>${camera.name}</strong><video id="focus-video" ${src.endsWith('.m3u8') ? `data-hls-src="${src}"` : `src="${src}"`} controls muted playsinline></video></article>`;
+  return `<article class="camera-focus-card"><div class="focus-head"><strong>${camera.name}</strong><label>Qualité <select id="camera-quality" class="plugin-input"><option value="hd" ${localStorage.getItem('camera_quality') === 'hd' ? 'selected' : ''}>HD</option><option value="ld" ${localStorage.getItem('camera_quality') !== 'hd' ? 'selected' : ''}>LD</option></select></label></div><video id="focus-video" ${src.endsWith('.m3u8') ? `data-hls-src="${src}"` : `src="${src}"`} controls muted playsinline></video></article>`;
 }
 
 function renderCameraFocus() {
@@ -438,6 +440,15 @@ async function createCamera(payload) {
   await loadData();
 }
 
+async function deleteCamera(id) {
+  if (!isAdmin()) return;
+  const response = await apiFetch(`/api/cameras/${id}`, { method: 'DELETE' });
+  if (!response.ok) return logEvent('Erreur suppression caméra');
+  logEvent(`Caméra ${id} supprimée`);
+  if (state.selectedCameraId === id) state.selectedCameraId = null;
+  await loadData();
+}
+
 async function updateCamera(id, payload) {
   if (!isAdmin()) return;
   const response = await apiFetch(`/api/cameras/${id}`, {
@@ -502,6 +513,7 @@ function renderPluginsConfig() {
           <label>Configuration JSON</label>
           <textarea id="config-${plugin.id}" ${isAdmin() ? '' : 'disabled'}>${JSON.stringify(plugin.config, null, 2)}</textarea>
           <button class="save" data-save-id="${plugin.id}" ${isAdmin() ? '' : 'disabled'}>Sauvegarder la configuration</button>
+          <button class="tab-btn" data-open-plugin-config="${plugin.id}">Ouvrir section ${plugin.name}</button>
           ${mqttExtra}
           ${visorxExtra}
         </div>
@@ -563,6 +575,7 @@ function cameraConfigCard(camera) {
         <label>ONVIF Password <input id="cam-onvif-pass-${camera.id}" class="plugin-input" value="${camera.onvif?.password || ''}" ${isAdmin() ? '' : 'disabled'} /></label>
       </details>
       <button class="save" data-save-camera="${camera.id}" ${isAdmin() ? '' : 'disabled'}>Sauvegarder caméra</button>
+      <button class="tab-btn" data-delete-camera="${camera.id}" ${isAdmin() ? '' : 'disabled'}>Supprimer caméra</button>
     </div>
     <div>${camera.streamUrl?.startsWith('rtsp://') ? '<span class="badge warning">RTSP direct non lisible web</span>' : '<span class="badge ok">Web playable</span>'}</div>
   </article>`;
@@ -743,6 +756,18 @@ function initNavigation() {
       });
     }
 
+    const deleteCamBtn = event.target.closest('[data-delete-camera]');
+    if (deleteCamBtn) {
+      return deleteCamera(deleteCamBtn.dataset.deleteCamera);
+    }
+
+    const openPluginBtn = event.target.closest('[data-open-plugin-config]');
+    if (openPluginBtn) {
+      const target = document.getElementById(`config-${openPluginBtn.dataset.openPluginConfig}`);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     const saveCamBtn = event.target.closest('[data-save-camera]');
     if (saveCamBtn) {
       const camId = saveCamBtn.dataset.saveCamera;
@@ -781,6 +806,12 @@ function initNavigation() {
   document.addEventListener('change', (event) => {
     const checkbox = event.target.closest('[data-plugin-id]');
     if (checkbox) togglePlugin(checkbox.dataset.pluginId, checkbox.checked);
+
+    const quality = event.target.closest('#camera-quality');
+    if (quality) {
+      localStorage.setItem('camera_quality', quality.value);
+      renderCameras();
+    }
   });
 }
 

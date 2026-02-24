@@ -74,6 +74,19 @@ nav { display: flex; flex-direction: column; gap: 0.55rem; }
   margin-top: .5rem;
 }
 
+.focus-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+
+.focus-head .plugin-input {
+  min-height: 34px;
+  padding: .3rem .45rem;
+}
+
 .zone {
   display: inline-flex;
   align-items: center;

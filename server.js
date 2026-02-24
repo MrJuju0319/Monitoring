@@ -136,10 +136,12 @@ function stopRtspRelayIfUnused(cameraId) {
 function getRtspWeb(cameraId) {
   if (!rtspWebState.has(cameraId)) {
     rtspWebState.set(cameraId, {
-      ffmpeg: null,
+      variants: {
+        hd: { ffmpeg: null, status: 'idle', lastError: null, startedAt: 0 },
+        ld: { ffmpeg: null, status: 'idle', lastError: null, startedAt: 0 }
+      },
       status: 'idle',
       lastError: null,
-      startedAt: 0,
       lastAccess: 0
     });
   }
@@ -165,7 +167,6 @@ async function startRtspWebConverter(cameraId, rtspUrl) {
   const normalizedRtsp = normalizeRtspUrl(rtspUrl);
   const relay = getRtspWeb(cameraId);
   relay.lastAccess = Date.now();
-  if (relay.ffmpeg) return relay;
 
   const cfg = await getRtspRelayConfig();
   if (!cfg.enabled) {
@@ -177,73 +178,98 @@ async function startRtspWebConverter(cameraId, rtspUrl) {
   await ensureLiveDir();
   const cameraLiveDir = path.join(liveDir, cameraId);
   await fs.mkdir(cameraLiveDir, { recursive: true });
-  const outputPath = path.join(cameraLiveDir, 'index.m3u8');
 
-  const ffmpegArgs = [
-    '-fflags', 'nobuffer',
-    '-flags', 'low_delay',
-    '-use_wallclock_as_timestamps', '1',
-    '-rtsp_transport', cfg.transport || 'tcp',
-    '-i', normalizedRtsp,
-    '-an',
-    '-preset', 'ultrafast',
-    '-tune', 'zerolatency',
-    '-vf', `scale=${cfg.width || 960}:${cfg.height || 540}`,
-    '-r', String(cfg.fps || 15),
-    '-b:v', `${cfg.bitrateKbps || 1200}k`,
-    '-c:v', 'libx264',
-    '-pix_fmt', 'yuv420p',
-    '-g', String(Math.max(10, Number(cfg.fps || 15))),
-    '-keyint_min', String(Math.max(10, Number(cfg.fps || 15))),
-    '-sc_threshold', '0',
-    '-f', 'hls',
-    '-hls_time', '0.5',
-    '-hls_list_size', '2',
-    '-hls_flags', 'delete_segments+append_list+independent_segments+omit_endlist+split_by_time+program_date_time',
-    '-hls_segment_filename', path.join(cameraLiveDir, 'seg_%06d.ts'),
-    outputPath
-  ];
+  const profiles = {
+    hd: { width: 1280, height: 720, bitrateKbps: 2400 },
+    ld: { width: cfg.width || 960, height: cfg.height || 540, bitrateKbps: cfg.bitrateKbps || 1200 }
+  };
 
-  try {
-    relay.ffmpeg = spawn(cfg.ffmpegPath || 'ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', 'pipe'] });
-  } catch (error) {
-    relay.status = 'error';
-    relay.lastError = error.message;
-    relay.ffmpeg = null;
-    return relay;
-  }
-  relay.startedAt = Date.now();
-  relay.status = 'starting';
-  relay.lastError = null;
+  const startVariant = (variant, profile) => {
+    const current = relay.variants[variant];
+    if (current.ffmpeg) return;
 
-  relay.ffmpeg.on('error', (error) => {
-    relay.status = 'error';
-    relay.lastError = error.message;
-    relay.ffmpeg = null;
-  });
+    const variantDir = path.join(cameraLiveDir, variant);
+    const outputPath = path.join(variantDir, 'index.m3u8');
+    const segmentPath = path.join(variantDir, 'seg_%06d.ts');
 
-  relay.ffmpeg.stderr.on('data', (chunk) => {
-    const msg = chunk.toString();
-    if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) relay.lastError = msg.slice(0, 500);
-    if (msg.includes('Opening') || msg.includes('.ts')) relay.status = 'streaming';
-  });
+    fs.mkdir(variantDir, { recursive: true }).catch(() => {});
 
-  relay.ffmpeg.on('close', (code) => {
-    relay.status = 'stopped';
-    if (code !== 0 && !relay.lastError) relay.lastError = `ffmpeg fermé avec code ${code}`;
-    relay.ffmpeg = null;
-  });
+    const ffmpegArgs = [
+      '-fflags', 'nobuffer',
+      '-flags', 'low_delay',
+      '-use_wallclock_as_timestamps', '1',
+      '-rtsp_transport', cfg.transport || 'tcp',
+      '-i', normalizedRtsp,
+      '-an',
+      '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
+      '-vf', `scale=${profile.width}:${profile.height}`,
+      '-r', String(cfg.fps || 15),
+      '-b:v', `${profile.bitrateKbps}k`,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-g', String(Math.max(10, Number(cfg.fps || 15))),
+      '-keyint_min', String(Math.max(10, Number(cfg.fps || 15))),
+      '-sc_threshold', '0',
+      '-f', 'hls',
+      '-hls_time', '0.5',
+      '-hls_list_size', '2',
+      '-hls_flags', 'delete_segments+append_list+independent_segments+omit_endlist+split_by_time+program_date_time',
+      '-hls_segment_filename', segmentPath,
+      outputPath
+    ];
+
+    try {
+      current.ffmpeg = spawn(cfg.ffmpegPath || 'ffmpeg', ffmpegArgs, { stdio: ['ignore', 'ignore', 'pipe'] });
+      current.status = 'starting';
+      current.lastError = null;
+      current.startedAt = Date.now();
+    } catch (error) {
+      current.status = 'error';
+      current.lastError = error.message;
+      current.ffmpeg = null;
+      return;
+    }
+
+    current.ffmpeg.on('error', (error) => {
+      current.status = 'error';
+      current.lastError = error.message;
+      current.ffmpeg = null;
+    });
+
+    current.ffmpeg.stderr.on('data', (chunk) => {
+      const msg = chunk.toString();
+      if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('fail')) current.lastError = msg.slice(0, 500);
+      if (msg.includes('Opening') || msg.includes('.ts')) current.status = 'streaming';
+    });
+
+    current.ffmpeg.on('close', (code) => {
+      current.status = 'stopped';
+      if (code !== 0 && !current.lastError) current.lastError = `ffmpeg ${variant} fermé avec code ${code}`;
+      current.ffmpeg = null;
+    });
+  };
+
+  startVariant('hd', profiles.hd);
+  startVariant('ld', profiles.ld);
+
+  relay.status = relay.variants.hd.status === 'streaming' || relay.variants.ld.status === 'streaming' ? 'streaming' : 'starting';
+  relay.lastError = relay.variants.hd.lastError || relay.variants.ld.lastError || null;
 
   return relay;
 }
 
 function stopRtspWebConverter(cameraId) {
   const relay = getRtspWeb(cameraId);
-  if (relay.ffmpeg) {
-    relay.ffmpeg.kill('SIGTERM');
-    relay.ffmpeg = null;
-    relay.status = 'idle';
+  for (const variant of ['hd', 'ld']) {
+    const state = relay.variants[variant];
+    if (state.ffmpeg) {
+      state.ffmpeg.kill('SIGTERM');
+      state.ffmpeg = null;
+      state.status = 'idle';
+    }
   }
+  relay.status = 'idle';
 }
 
 async function syncRtspWebConverters() {
@@ -431,6 +457,20 @@ function detectCameraPlayback(camera) {
   }
 
   return { canPlayDirectly: true, reason: '', recommendedUrl: source };
+}
+
+function buildCameraPlaybackMeta(camera, token = '') {
+  const playback = detectCameraPlayback(camera);
+  if ((camera.streamUrl || '').toLowerCase().startsWith('rtsp://')) {
+    playback.wsUrl = `/rtsp/${camera.id}?token=${encodeURIComponent(token)}`;
+    const relay = getCameraRelay(camera.id);
+    playback.relayStatus = relay.status;
+    playback.relayError = relay.lastError;
+    playback.webLiveUrl = `/live/${camera.id}/ld/index.m3u8`;
+    playback.webLiveLdUrl = `/live/${camera.id}/ld/index.m3u8`;
+    playback.webLiveHdUrl = `/live/${camera.id}/hd/index.m3u8`;
+  }
+  return playback;
 }
 
 async function getMqttPlugin() {
@@ -765,17 +805,7 @@ app.post('/api/plans/:id/zones/positions', authRequired, adminOnly, async (req, 
 app.get('/api/cameras', authRequired, async (req, res) => {
   const cameras = await readJson(camerasFile);
   const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
-  const withPlayback = cameras.map((camera) => {
-    const playback = detectCameraPlayback(camera);
-    if ((camera.streamUrl || '').toLowerCase().startsWith('rtsp://')) {
-      playback.wsUrl = `/rtsp/${camera.id}?token=${encodeURIComponent(token)}`;
-      const relay = getCameraRelay(camera.id);
-      playback.relayStatus = relay.status;
-      playback.relayError = relay.lastError;
-      playback.webLiveUrl = `/live/${camera.id}/index.m3u8`;
-    }
-    return { ...camera, playback };
-  });
+  const withPlayback = cameras.map((camera) => ({ ...camera, playback: buildCameraPlaybackMeta(camera, token) }));
   res.json(withPlayback);
 });
 
@@ -810,22 +840,34 @@ app.put('/api/cameras/:id', authRequired, adminOnly, async (req, res) => {
   res.json(camera);
 });
 
+app.delete('/api/cameras/:id', authRequired, adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const cameras = await readJson(camerasFile);
+  const index = cameras.findIndex((item) => item.id === id);
+  if (index === -1) return res.status(404).json({ error: 'Caméra introuvable' });
+
+  const [deleted] = cameras.splice(index, 1);
+  await writeJson(camerasFile, cameras);
+  stopRtspWebConverter(id);
+  const relay = getCameraRelay(id);
+  if (relay.ffmpeg) relay.ffmpeg.kill('SIGTERM');
+  rtspRelayState.delete(id);
+  rtspWebState.delete(id);
+
+  return res.json({ ok: true, deleted });
+});
+
 app.get('/api/cameras/:id/playback', authRequired, async (req, res) => {
   const cameras = await readJson(camerasFile);
   const camera = cameras.find((item) => item.id === req.params.id);
   if (!camera) return res.status(404).json({ error: 'Caméra introuvable' });
-  const playback = detectCameraPlayback(camera);
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
+  const playback = buildCameraPlaybackMeta(camera, token);
   if ((camera.streamUrl || '').toLowerCase().startsWith('rtsp://')) {
     await startRtspWebConverter(camera.id, camera.streamUrl);
-    const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
-    playback.wsUrl = `/rtsp/${camera.id}?token=${encodeURIComponent(token)}`;
-    const relay = getCameraRelay(camera.id);
-    playback.relayStatus = relay.status;
-    playback.relayError = relay.lastError;
     const webRelay = getRtspWeb(camera.id);
-    playback.webLiveUrl = `/live/${camera.id}/index.m3u8`;
-    playback.webRelayStatus = webRelay.status;
-    playback.webRelayError = webRelay.lastError;
+    playback.webRelayStatus = webRelay.variants.hd.status === 'streaming' || webRelay.variants.ld.status === 'streaming' ? 'streaming' : 'starting';
+    playback.webRelayError = webRelay.variants.hd.lastError || webRelay.variants.ld.lastError || null;
   }
   res.json(playback);
 });

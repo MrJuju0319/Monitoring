@@ -77,6 +77,7 @@ Endpoints associés:
 - Interface responsive.
 - Grille caméras responsive (desktop/tablette/mobile) avec vidéos 16:9 adaptatives.
 - Panneau **Caméra sélectionnée** en mode Plans, avec sélection au clic sur les tuiles caméra.
+- Sélecteur de qualité caméra **HD / LD** pour les flux RTSP convertis.
 
 ## API rapide
 
@@ -104,8 +105,10 @@ Endpoints associés:
 - `GET /api/cameras`
 - `POST /api/cameras` (**admin**)
 - `PUT /api/cameras/:id` (**admin**)
+- `DELETE /api/cameras/:id` (**admin**)
 - `GET /api/cameras/:id/playback`
-- Convertisseur RTSP->HLS sync au démarrage serveur + resync périodique
+- Convertisseur RTSP->HLS sync au démarrage serveur + resync périodique.
+- Variantes HLS locales: `webLiveHdUrl` (HD) et `webLiveLdUrl` (LD).
 
 ### Monitoring
 - `GET /api/dashboard`
