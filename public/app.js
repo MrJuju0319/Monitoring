@@ -8,7 +8,9 @@ const state = {
   equipment: null,
   activePlanId: null,
   editingMode: false,
-  historyRangeMinutes: 60
+  historyRangeMinutes: 60,
+  selectedCameraId: null,
+  zoneSince: {}
 };
 
 const loginView = document.getElementById('login-view');
@@ -24,6 +26,7 @@ const summaryCards = document.getElementById('summary-cards');
 const planTabs = document.getElementById('plan-tabs');
 const planCanvas = document.getElementById('plan-canvas');
 const cameraGrid = document.getElementById('camera-grid');
+const cameraFocus = document.getElementById('camera-focus');
 const configPlugins = document.getElementById('config-plugins');
 const configPlans = document.getElementById('config-plans');
 const configCameras = document.getElementById('config-cameras');
@@ -116,8 +119,22 @@ function renderDashboard() {
   ].join('');
 }
 
-function zoneBadge(zone) {
-  return `<div class="zone ${zone.state}" data-zone-id="${zone.id}" style="left:${zone.x}%;top:${zone.y}%">${zone.label} · ${zone.state}</div>`;
+function formatDuration(ms) {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function zoneBadge(planId, zone) {
+  const key = `${planId}:${zone.id}`;
+  if (!state.zoneSince[key]) state.zoneSince[key] = Date.now();
+  const sinceLabel = formatDuration(Date.now() - state.zoneSince[key]);
+  const icon = zone.state === 'critical' ? '⛔' : zone.state === 'warning' ? '🚶' : '🟢';
+  return `<div class="zone ${zone.state}" data-zone-id="${zone.id}" style="left:${zone.x}%;top:${zone.y}%"><span class="zone-icon">${icon}</span><span>${zone.label}</span><small>${sinceLabel}</small></div>`;
 }
 
 function renderPlans() {
@@ -139,7 +156,7 @@ function renderPlans() {
   planCanvas.style.backgroundSize = 'contain';
   planCanvas.style.backgroundRepeat = 'no-repeat';
   planCanvas.style.backgroundPosition = 'center';
-  planCanvas.innerHTML = activePlan.zones.map(zoneBadge).join('');
+  planCanvas.innerHTML = activePlan.zones.map((zone) => zoneBadge(activePlan.id, zone)).join('');
   planCanvas.classList.toggle('editing', state.editingMode && isAdmin());
 }
 
@@ -244,12 +261,40 @@ function setupRtspPlayers() {
   }
 }
 
+
+function cameraFocusHtml(camera) {
+  if (!camera) return '<p class="warning-text">Sélectionnez une caméra dans la liste.</p>';
+  const src = camera.hlsUrl || camera.playback?.webLiveUrl || camera.streamUrl || '';
+  if (!src) return `<p class="warning-text">${camera.name}: flux indisponible.</p>`;
+  return `<article class="camera-focus-card"><strong>${camera.name}</strong><video id="focus-video" ${src.endsWith('.m3u8') ? `data-hls-src="${src}"` : `src="${src}"`} controls muted playsinline></video></article>`;
+}
+
+function renderCameraFocus() {
+  if (!cameraFocus) return;
+  if (!state.selectedCameraId && state.cameras.length) state.selectedCameraId = state.cameras[0].id;
+  const selected = state.cameras.find((c) => c.id === state.selectedCameraId) || state.cameras[0];
+  cameraFocus.innerHTML = cameraFocusHtml(selected);
+
+  const video = document.getElementById('focus-video');
+  if (!video || !selected) return;
+  const hlsSource = video.dataset.hlsSrc || '';
+  if (hlsSource && window.Hls && window.Hls.isSupported()) {
+    const hls = new window.Hls({ liveSyncDurationCount: 1, lowLatencyMode: true, maxBufferLength: 2 });
+    hls.loadSource(hlsSource);
+    hls.attachMedia(video);
+    hls.on(window.Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+  } else if (hlsSource && video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = hlsSource;
+    video.play().catch(() => {});
+  }
+}
+
 function renderCameras() {
   const count = Math.max(1, state.cameras.length);
 
   cameraGrid.innerHTML = state.cameras
     .map((camera) => {
-      return `<article class="camera-tile camera-count-${count}">
+      return `<article class="camera-tile camera-count-${count}" data-camera-id="${camera.id}">
         <strong>${camera.name}</strong>
         <div><span class="badge ${camera.status === 'online' ? 'ok' : 'critical'}">${camera.status}</span> · ${camera.zone}</div>
         ${cameraPlaybackHtml(camera)}
@@ -259,6 +304,7 @@ function renderCameras() {
 
   setupRtspPlayers();
   setupHlsPlayers();
+  renderCameraFocus();
 }
 
 function renderEquipment() {
@@ -714,6 +760,14 @@ function initNavigation() {
       });
     }
 
+
+    const cameraTile = event.target.closest('[data-camera-id]');
+    if (cameraTile) {
+      state.selectedCameraId = cameraTile.dataset.cameraId;
+      renderCameraFocus();
+      return;
+    }
+
     const configTab = event.target.closest('[data-config-tab]');
     if (configTab) {
       document.querySelectorAll('[data-config-tab]').forEach((btn) => btn.classList.remove('active'));
@@ -744,7 +798,16 @@ function initRealtime() {
   ws.onmessage = async (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'zones:update') {
-      state.plans = data.payload;
+      const incomingPlans = data.payload;
+      for (const plan of incomingPlans) {
+        for (const zone of plan.zones) {
+          const key = `${plan.id}:${zone.id}`;
+          const prev = state.plans.find((p) => p.id === plan.id)?.zones.find((z) => z.id === zone.id);
+          if (!state.zoneSince[key]) state.zoneSince[key] = Date.now();
+          if (prev && prev.state !== zone.state) state.zoneSince[key] = Date.now();
+        }
+      }
+      state.plans = incomingPlans;
       renderPlans();
       await loadHistory();
     }

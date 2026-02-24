@@ -63,6 +63,7 @@ Endpoints associés:
 
 ## Fonctionnalités
 
+- **Mode plan visuel type VISO**: overlays capteurs avec icône état + durée, et dock caméra sélectionnée dans la vue Plans.
 - Dashboard global avec résumé des modules, plans, caméras et alertes.
 - Historique d’état des capteurs sur une fenêtre de temps configurable.
 - Page Plans avec onglet par plan, image de plan et zones `ok/warning/critical`.
@@ -75,6 +76,7 @@ Endpoints associés:
 - WebSocket temps réel authentifié.
 - Interface responsive.
 - Grille caméras responsive (desktop/tablette/mobile) avec vidéos 16:9 adaptatives.
+- Panneau **Caméra sélectionnée** en mode Plans, avec sélection au clic sur les tuiles caméra.
 
 ## API rapide
 

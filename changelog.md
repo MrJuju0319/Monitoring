@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.5] - 2026-02-23
+
+### Added
+- Vue Plans enrichie “type VISO” avec dock caméra sélectionnée et sélection de caméra au clic.
+- Overlays zones enrichis avec icône d’état et durée d’état affichée en direct.
+
+### Changed
+- Responsive de la section Plans amélioré (layout plan + dock caméra adaptatif mobile/tablette/desktop).
+
 ## [0.6.4] - 2026-02-23
 
 ### Changed
