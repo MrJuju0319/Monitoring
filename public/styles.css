@@ -102,6 +102,22 @@ nav { display: flex; flex-direction: column; gap: 0.55rem; }
 
 .zone-icon { font-size: .95rem; }
 
+.plan-camera-editor {
+  position: absolute;
+  right: .6rem;
+  top: .6rem;
+  background: rgba(12, 18, 27, .9);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: .5rem;
+  max-width: 260px;
+  display: grid;
+  gap: .3rem;
+  z-index: 3;
+}
+
+.plan-camera-editor label { font-size: .82rem; color: var(--muted); display: flex; gap: .35rem; }
+
 .zone { position:absolute; transform:translate(-50%,-50%); padding:0.28rem .5rem; border-radius:8px; font-size:.75rem; border:1px solid; white-space:nowrap; touch-action:none; }
 .plan-canvas.editing .zone { cursor: grab; }
 .plan-canvas.editing .zone.dragging { cursor: grabbing; }

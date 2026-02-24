@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.7] - 2026-02-24
+
+### Added
+- Association explicite des caméras par plan (`PUT /api/plans/:id/cameras`) avec sélection en mode édition de plan.
+
+### Changed
+- Chargement initial optimisé: récupération prioritaire des données nécessaires à l’écran (plans/caméras/dashboard) puis chargement asynchrone du reste.
+- La page Plans n’affiche plus toutes les caméras par défaut: seulement celles associées au plan (ou toutes en mode édition admin pour sélection).
+- Suppression des données de démo dans `data/plans.json`, `data/cameras.json`, `data/users.json`.
+
 ## [0.6.6] - 2026-02-24
 
 ### Added

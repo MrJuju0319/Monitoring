@@ -747,6 +747,7 @@ app.post('/api/plans', authRequired, adminOnly, upload.single('image'), async (r
     backgroundImage,
     width,
     height,
+    cameraIds: [],
     zones: []
   };
 
@@ -797,6 +798,22 @@ app.post('/api/plans/:id/zones/positions', authRequired, adminOnly, async (req, 
     zone.x = Math.max(2, Math.min(98, zoneUpdate.x));
     zone.y = Math.max(2, Math.min(98, zoneUpdate.y));
   }
+
+  await writeJson(plansFile, plans);
+  return res.json(plan);
+});
+
+app.put('/api/plans/:id/cameras', authRequired, adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const { cameraIds } = req.body;
+  if (!Array.isArray(cameraIds)) return res.status(400).json({ error: 'cameraIds doit être un tableau' });
+
+  const [plans, cameras] = await Promise.all([readJson(plansFile), readJson(camerasFile)]);
+  const plan = plans.find((item) => item.id === id);
+  if (!plan) return res.status(404).json({ error: 'Plan introuvable' });
+
+  const cameraSet = new Set(cameras.map((camera) => camera.id));
+  plan.cameraIds = [...new Set(cameraIds.filter((cameraId) => typeof cameraId === 'string' && cameraSet.has(cameraId)))];
 
   await writeJson(plansFile, plans);
   return res.json(plan);

@@ -100,6 +100,7 @@ Endpoints associés:
 - `POST /api/plans` (**admin**, `multipart/form-data` avec `name` + `image`)
 - `PUT /api/plans/:id` (**admin**, `multipart/form-data` avec `name` + `image`)
 - `POST /api/plans/:id/zones/positions` (**admin**)
+- `PUT /api/plans/:id/cameras` (**admin**)
 
 ### Caméras
 - `GET /api/cameras`
@@ -130,3 +131,10 @@ Conformément à la demande projet:
 - Le frontend charge `hls.js` pour lire le flux web live HLS généré automatiquement.
 - La retransmission est fournie en **HTTP HLS local** via `/live/<cameraId>/index.m3u8`.
 - Le flux caméra utilise `streamUrl` en `rtsp://...` (ou `hlsUrl` si disponible pour fallback).
+
+
+## Données de démarrage
+
+- Le projet est désormais livré **sans données de démo** (`plans`, `caméras`, `utilisateurs` vides).
+- Créez vos comptes/caméras/plans depuis la page Configuration ou via API.
+- Les caméras ne s’affichent plus automatiquement dans Plans: elles doivent être associées au plan en mode édition puis sauvegardées.

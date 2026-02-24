@@ -10,7 +10,8 @@ const state = {
   editingMode: false,
   historyRangeMinutes: 60,
   selectedCameraId: null,
-  zoneSince: {}
+  zoneSince: {},
+  planCameraDraft: []
 };
 
 const loginView = document.getElementById('login-view');
@@ -73,6 +74,21 @@ function card(label, value) {
 
 function getActivePlan() {
   return state.plans.find((plan) => plan.id === state.activePlanId) || state.plans[0];
+}
+
+function getVisiblePlanCameras() {
+  const activePlan = getActivePlan();
+  if (!activePlan) return [];
+  const ids = new Set(activePlan.cameraIds || []);
+  if (state.editingMode && isAdmin()) return state.cameras;
+  return state.cameras.filter((camera) => ids.has(camera.id));
+}
+
+function renderPlanCameraEditor() {
+  const activePlan = getActivePlan();
+  if (!activePlan || !state.editingMode || !isAdmin()) return '';
+  const selected = new Set(state.planCameraDraft.length ? state.planCameraDraft : (activePlan.cameraIds || []));
+  return `<div class="plan-camera-editor"><strong>Caméras du plan</strong>${state.cameras.map((camera)=>`<label><input type="checkbox" data-plan-camera="${camera.id}" ${selected.has(camera.id) ? 'checked' : ''}/> ${camera.name}</label>`).join('')}</div>`;
 }
 
 function showApp() {
@@ -156,7 +172,7 @@ function renderPlans() {
   planCanvas.style.backgroundSize = 'contain';
   planCanvas.style.backgroundRepeat = 'no-repeat';
   planCanvas.style.backgroundPosition = 'center';
-  planCanvas.innerHTML = activePlan.zones.map((zone) => zoneBadge(activePlan.id, zone)).join('');
+planCanvas.innerHTML = activePlan.zones.map((zone) => zoneBadge(activePlan.id, zone)).join('') + renderPlanCameraEditor();
   planCanvas.classList.toggle('editing', state.editingMode && isAdmin());
 }
 
@@ -273,8 +289,9 @@ function cameraFocusHtml(camera) {
 
 function renderCameraFocus() {
   if (!cameraFocus) return;
-  if (!state.selectedCameraId && state.cameras.length) state.selectedCameraId = state.cameras[0].id;
-  const selected = state.cameras.find((c) => c.id === state.selectedCameraId) || state.cameras[0];
+const visibleCameras = getVisiblePlanCameras();
+  if (!state.selectedCameraId && visibleCameras.length) state.selectedCameraId = visibleCameras[0].id;
+  const selected = visibleCameras.find((c) => c.id === state.selectedCameraId) || visibleCameras[0];
   cameraFocus.innerHTML = cameraFocusHtml(selected);
 
   const video = document.getElementById('focus-video');
@@ -292,9 +309,10 @@ function renderCameraFocus() {
 }
 
 function renderCameras() {
-  const count = Math.max(1, state.cameras.length);
+  const visibleCameras = getVisiblePlanCameras();
+  const count = Math.max(1, visibleCameras.length);
 
-  cameraGrid.innerHTML = state.cameras
+  cameraGrid.innerHTML = visibleCameras
     .map((camera) => {
       return `<article class="camera-tile camera-count-${count}" data-camera-id="${camera.id}">
         <strong>${camera.name}</strong>
@@ -380,6 +398,21 @@ async function publishMqttValue(value) {
     return logEvent(`Échec publish MQTT: ${err.error}`);
   }
   logEvent(`Valeur MQTT publiée: ${value}`);
+}
+
+
+async function savePlanCameras() {
+  if (!isAdmin()) return;
+  const activePlan = getActivePlan();
+  if (!activePlan) return;
+  const response = await apiFetch(`/api/plans/${activePlan.id}/cameras`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cameraIds: state.planCameraDraft })
+  });
+  if (!response.ok) return logEvent('Échec sauvegarde caméras du plan');
+  logEvent(`Caméras du plan ${activePlan.name} mises à jour`);
+  await loadData();
 }
 
 async function savePlanZonesPositions() {
@@ -602,27 +635,31 @@ function renderConfig() {
 }
 
 async function loadData() {
-  const [plugins, plans, cameras, dashboard, equipment] = await Promise.all([
-    apiFetch('/api/plugins').then((r) => r.json()),
+  const [plans, cameras, dashboard] = await Promise.all([
     apiFetch('/api/plans').then((r) => r.json()),
     apiFetch('/api/cameras').then((r) => r.json()),
-    apiFetch('/api/dashboard').then((r) => r.json()),
-    apiFetch('/api/equipment-status').then((r) => r.json())
+    apiFetch('/api/dashboard').then((r) => r.json())
   ]);
 
-  state.plugins = plugins;
   state.plans = plans;
   state.cameras = cameras;
   state.dashboard = dashboard;
-  state.equipment = equipment;
 
   if (!state.activePlanId && plans.length) state.activePlanId = plans[0].id;
 
   renderDashboard();
   renderPlans();
   renderCameras();
-  renderEquipment();
-  renderConfig();
+
+  Promise.all([
+    apiFetch('/api/plugins').then((r) => r.json()),
+    apiFetch('/api/equipment-status').then((r) => r.json())
+  ]).then(([plugins, equipment]) => {
+    state.plugins = plugins;
+    state.equipment = equipment;
+    renderEquipment();
+    renderConfig();
+  }).catch(() => {});
 }
 
 async function sendVisorxOpen(index) {
@@ -671,11 +708,18 @@ function initNavigation() {
 
   editModeToggle.addEventListener('click', () => {
     if (!isAdmin()) return;
-    setEditingMode(!state.editingMode);
+setEditingMode(!state.editingMode);
+    const activePlan = getActivePlan();
+    state.planCameraDraft = state.editingMode ? [...(activePlan?.cameraIds || [])] : [];
+    renderPlans();
+    renderCameras();
     logEvent(`Mode édition ${state.editingMode ? 'activé' : 'désactivé'}`);
   });
 
-  savePlanButton.addEventListener('click', savePlanZonesPositions);
+  savePlanButton.addEventListener('click', async () => {
+    await savePlanZonesPositions();
+    await savePlanCameras();
+  });
   configRefreshBtn.addEventListener('click', async () => {
     await loadData();
     logEvent('Configuration rafraîchie manuellement');
@@ -811,6 +855,12 @@ function initNavigation() {
     if (quality) {
       localStorage.setItem('camera_quality', quality.value);
       renderCameras();
+    }
+
+    const planCamera = event.target.closest('[data-plan-camera]');
+    if (planCamera) {
+      const values = [...document.querySelectorAll('[data-plan-camera]:checked')].map((el) => el.dataset.planCamera);
+      state.planCameraDraft = values;
     }
   });
 }
