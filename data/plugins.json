@@ -1,0 +1,109 @@
+[
+  {
+    "id": "presence-sensors",
+    "name": "Capteurs de présence",
+    "description": "Détection de mouvement sur les zones critiques",
+    "enabled": true,
+    "config": {
+      "pollIntervalMs": 1500,
+      "alertThresholdSec": 45
+    }
+  },
+  {
+    "id": "door-contacts",
+    "name": "Contacts portes",
+    "description": "Suivi ouverture/fermeture des accès",
+    "enabled": true,
+    "config": {
+      "pollIntervalMs": 1000,
+      "notifyOnOpenSec": 120
+    }
+  },
+  {
+    "id": "weather-feed",
+    "name": "Météo",
+    "description": "Intégration météo pour contexte environnemental",
+    "enabled": false,
+    "config": {
+      "location": "Bruxelles",
+      "refreshSec": 600
+    }
+  },
+  {
+    "id": "camera-streams",
+    "name": "Flux caméras",
+    "description": "Gestion des flux vidéo des caméras",
+    "enabled": true,
+    "config": {
+      "layout": "grid",
+      "maxVisible": 4
+    }
+  },
+  {
+    "id": "mqtt-io",
+    "name": "MQTT I/O",
+    "description": "Abonnement MQTT (binaire/numérique/texte) et publication de commandes",
+    "enabled": false,
+    "config": {
+      "brokerUrl": "mqtt://broker.hivemq.com:1883",
+      "username": "",
+      "password": "",
+      "subscribeTopic": "monitoring/demo/in",
+      "publishTopic": "monitoring/demo/out",
+      "dataType": "binary",
+      "unit": "",
+      "qos": 0,
+      "retain": false
+    }
+  },
+  {
+    "id": "rtsp-relay",
+    "name": "RTSP Relay",
+    "description": "Relais RTSP vers WebSocket MPEG-TS pour affichage navigateur (JSMpeg)",
+    "enabled": true,
+    "config": {
+      "ffmpegPath": "ffmpeg",
+      "transport": "tcp",
+      "width": 960,
+      "height": 540,
+      "fps": 15,
+      "bitrateKbps": 1200
+    }
+  },
+  {
+    "id": "visorx-control",
+    "name": "VisorX Control",
+    "description": "Pilotage open.cgi (Digest) + lecture historique GetEvenements.cgi",
+    "enabled": false,
+    "config": {
+      "scheme": "http",
+      "host": "",
+      "user": "admin",
+      "code": "",
+      "openPath": "/FR/open.cgi",
+      "eventsPath": "/FR/GetEvenements.cgi",
+      "timeoutSeconds": 8,
+      "natureMap": {
+        "10": "Utilisateur accepté",
+        "49": "Ouverture à distance",
+        "54": "Ouverture bouton poussoir",
+        "57": "Connexion lecteur",
+        "77": "Connexion bus extension",
+        "87": "Ouverture bus extension"
+      },
+      "readerMap": {
+        "0": "Bus interne",
+        "1": "Lecteur 1",
+        "2": "Lecteur 2",
+        "3": "Lecteur 3",
+        "4": "Lecteur 4",
+        "5": "Entrée Bureau"
+      },
+      "userMap": {
+        "0": "INCONUE",
+        "110482": "LEBOCQ SEBASTIEN",
+        "110483": "GALLOT MICHAEL"
+      }
+    }
+  }
+]
